@@ -39,6 +39,10 @@ RUN git clone -b humble --depth 1 https://github.com/agilexrobotics/limo_ros2.gi
     git clone --depth 1 https://github.com/agilexrobotics/limo_cobot_sim.git && \
     git clone --depth 1 https://github.com/elephantrobotics/mycobot_ros2.git
 
+RUN rm -rf \
+    /home/ros/limo_cobot_ws/src/limo_ros2/limo_description \
+    /home/ros/limo_cobot_ws/src/mycobot_ros2/mycobot_description
+
 # Fix any required permission
 WORKDIR /home/$USERNAME/limo_cobot_ws
 
