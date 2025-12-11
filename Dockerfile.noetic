@@ -7,7 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-lc"]
 
 # --------------------------------------------------------------------------
-# Core system dependencies
+# System tools, Python basics, ROS tools, MoveIt
 # --------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
@@ -15,10 +15,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv \
     git \
     curl \
+    python3-rosdep \
+    vim \
+    less \
+    ros-noetic-moveit \
+    ros-noetic-ros-control \
+    ros-noetic-ros-controllers \
+    ros-noetic-effort-controllers \
+    mesa-utils \
  && rm -rf /var/lib/apt/lists/*
 
 # --------------------------------------------------------------------------
-# Install Python 3.9 (from deadsnakes PPA)
+# Install Python 3.9 (deadsnakes PPA)
 # --------------------------------------------------------------------------
 RUN add-apt-repository ppa:deadsnakes/ppa -y \
  && apt-get update && apt-get install -y --no-install-recommends \
@@ -38,20 +46,48 @@ RUN python3.9 -m venv "${ROSA_VENV}" \
  && pip install jpl-rosa
 
 # --------------------------------------------------------------------------
-# ROS environment convenience
+# Initialize rosdep
 # --------------------------------------------------------------------------
-ENV ROS_DISTRO=noetic
+RUN rosdep update || (rosdep init && rosdep update)
 
-RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /root/.bashrc \
+# --------------------------------------------------------------------------
+# Create catkin workspace and clone LIMO COBOT sim repo
+# --------------------------------------------------------------------------
+ENV CATKIN_WS=/root/catkin_ws
+WORKDIR ${CATKIN_WS}
+
+RUN mkdir -p src
+WORKDIR ${CATKIN_WS}/src
+
+RUN git clone https://github.com/agilexrobotics/limo_cobot_sim.git
+
+# --------------------------------------------------------------------------
+# Install dependencies via rosdep
+# --------------------------------------------------------------------------
+WORKDIR ${CATKIN_WS}
+
+RUN source /opt/ros/noetic/setup.bash \
+ && rosdep install --from-paths src --ignore-src -r -y
+
+# --------------------------------------------------------------------------
+# Build catkin workspace
+# --------------------------------------------------------------------------
+RUN source /opt/ros/noetic/setup.bash \
+ && catkin_make
+
+# --------------------------------------------------------------------------
+# Convenience: source ROS, workspace, and ROSA in interactive shells
+# --------------------------------------------------------------------------
+RUN echo "source /opt/ros/noetic/setup.bash" >> /root/.bashrc \
+ && echo "source /root/catkin_ws/devel/setup.bash" >> /root/.bashrc \
  && echo "source ${ROSA_VENV}/bin/activate" >> /root/.bashrc
 
 # --------------------------------------------------------------------------
-# Create default catkin workspace
+# Force software rendering for OpenGL in container (Gazebo & RViz)
 # --------------------------------------------------------------------------
-WORKDIR /root/catkin_ws
-RUN mkdir -p src
+ENV LIBGL_ALWAYS_SOFTWARE=1
 
 # --------------------------------------------------------------------------
-# Default command: interactive shell with ROS + ROSA venv active
+# Default: start LIMO COBOT simulation in Gazebo Classic
 # --------------------------------------------------------------------------
-CMD ["bash"]
+CMD ["bash", "-lc", "source /root/catkin_ws/devel/setup.bash && roslaunch limo_cobot_moveit demo_gazebo.launch"]
