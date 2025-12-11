@@ -1,0 +1,57 @@
+# --------------------------------------------------------------------------
+# Base: Ubuntu 20.04 + ROS Noetic + Gazebo Classic
+# --------------------------------------------------------------------------
+FROM osrf/ros:noetic-desktop-full
+
+ENV DEBIAN_FRONTEND=noninteractive
+SHELL ["/bin/bash", "-lc"]
+
+# --------------------------------------------------------------------------
+# Core system dependencies
+# --------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    python3-pip \
+    python3-venv \
+    git \
+    curl \
+ && rm -rf /var/lib/apt/lists/*
+
+# --------------------------------------------------------------------------
+# Install Python 3.9 (from deadsnakes PPA)
+# --------------------------------------------------------------------------
+RUN add-apt-repository ppa:deadsnakes/ppa -y \
+ && apt-get update && apt-get install -y --no-install-recommends \
+    python3.9 \
+    python3.9-venv \
+    python3.9-distutils \
+ && rm -rf /var/lib/apt/lists/*
+
+# --------------------------------------------------------------------------
+# Create Python 3.9 venv and install ROSA (jpl-rosa)
+# --------------------------------------------------------------------------
+ENV ROSA_VENV=/opt/rosa-venv
+
+RUN python3.9 -m venv "${ROSA_VENV}" \
+ && source "${ROSA_VENV}/bin/activate" \
+ && pip install --upgrade pip \
+ && pip install jpl-rosa
+
+# --------------------------------------------------------------------------
+# ROS environment convenience
+# --------------------------------------------------------------------------
+ENV ROS_DISTRO=noetic
+
+RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /root/.bashrc \
+ && echo "source ${ROSA_VENV}/bin/activate" >> /root/.bashrc
+
+# --------------------------------------------------------------------------
+# Create default catkin workspace
+# --------------------------------------------------------------------------
+WORKDIR /root/catkin_ws
+RUN mkdir -p src
+
+# --------------------------------------------------------------------------
+# Default command: interactive shell with ROS + ROSA venv active
+# --------------------------------------------------------------------------
+CMD ["bash"]
