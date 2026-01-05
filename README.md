@@ -1,15 +1,5 @@
-# llm-pick-me-bots
-
-# LIMO Robot Office Simulation (Tested on Ubuntu 22.04)
-
-**Goal:** Launch the LIMO Cobot simulation inside the custom "Office Environment" without the simulation freezing or the robot failing to spawn.
-
-**Prerequisites:**
-* **OS:** Ubuntu 22.04 LTS
-* **Tools:** Docker installed
-* **Display:** Standard X11 Display Server (Default on Ubuntu)
-
----
+```markdown
+# LIMO Office Simulation Setup Guide
 
 ## Step 1: Start the Docker Container (Host Machine)
 
@@ -34,22 +24,21 @@ sudo docker run -it \
     --volume="/tmp/.X11-unix:/tmp/.X11-unix:rw" \
     limo_office \
     /bin/bash
+```
 
-Step 2: Create the "Safe Launch" Script (Inside Docker)
+## Step 2: Create the "Safe Launch" Script (Inside Docker)
 
-Where to run this: Inside the Docker container (your prompt should look like root@hostname...).
+**Where to run this:** Inside the Docker container (your prompt should look like `root@hostname...`).
 
 The standard office world file has "Shadows" enabled, which causes Docker to crash or freeze on many computers. We will create a script that automatically:
 
-    Downloads the office environment.
-
-    Disables shadows to fix the crashing.
-
-    Spawns the robot safely.
+1. Downloads the office environment.
+2. Disables shadows to fix the crashing.
+3. Spawns the robot safely.
 
 Copy and paste this entire code block into your terminal:
-Bash
 
+```bash
 cat << 'EOF' > start_simulation.sh
 #!/bin/bash
 set -e
@@ -57,15 +46,15 @@ set -e
 # --- 1. SETUP & CLEANUP ---
 source /root/catkin_ws/devel/setup.bash
 echo ">>> Killing old Gazebo processes..."
-pkill -f gazebo
-pkill -f rosmaster
+pkill -f gazebo || true
+pkill -f rosmaster || true
 sleep 2
 
 # --- 2. DOWNLOAD OFFICE ASSETS ---
 # Automatically downloads the map if you don't have it
 if [ ! -d "/root/gazebo_assets" ]; then
     echo ">>> Downloading Office Map..."
-    git clone [https://github.com/leonhartyao/gazebo_models_worlds_collection.git](https://github.com/leonhartyao/gazebo_models_worlds_collection.git) /root/gazebo_assets
+    git clone https://github.com/leonhartyao/gazebo_models_worlds_collection.git /root/gazebo_assets
 fi
 export GAZEBO_MODEL_PATH=$GAZEBO_MODEL_PATH:/root/gazebo_assets/models
 
@@ -124,30 +113,34 @@ EOF
 
 # Make the script executable
 chmod +x start_simulation.sh
+```
 
-Step 3: Run the Simulation (Inside Docker)
+## Step 3: Run the Simulation (Inside Docker)
 
 Now that the script is created, run it to start the simulation:
-Bash
 
+```bash
 ./start_simulation.sh
+```
 
-Crucial Troubleshooting
+### Crucial Troubleshooting
 
-    "Not Responding" is Normal: When the window first opens, Ubuntu might say "Application is not responding" for 10-20 seconds. Do not force close it. It is just loading the heavy office textures.
+**"Not Responding" is Normal:** When the window first opens, Ubuntu might say "Application is not responding" for 10-20 seconds. Do not force close it. It is just loading the heavy office textures.
 
-    The Robot is Missing/Broken? The simulation launches PAUSED. The robot will not appear correctly until you click the Play Button at the bottom left of the Gazebo window.
+**The Robot is Missing/Broken?** The simulation launches PAUSED. The robot will not appear correctly until you click the Play Button at the bottom left of the Gazebo window.
 
-Step 4: Drive the Robot (Host Machine)
+## Step 4: Drive the Robot (Host Machine)
 
-Where to run this: Open a New Terminal window on your Ubuntu computer (Host).
+**Where to run this:** Open a new terminal window on your Ubuntu computer (Host).
 
 Since your first terminal is busy running the simulation, you need a second terminal to send keyboard commands.
-Bash
 
+```bash
 # 1. Log into the running container
 sudo docker exec -it $(sudo docker ps -q | head -n 1) bash
 
 # 2. Start the Keyboard Driver
 source /root/catkin_ws/devel/setup.bash
 rosrun teleop_twist_keyboard teleop_twist_keyboard.py
+```
+```
