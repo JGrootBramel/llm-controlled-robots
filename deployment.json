@@ -1,0 +1,93 @@
+{
+  "id": "/subscriptions/cda14b30-c2d9-4241-a4b1-e1cb32352f7e/resourceGroups/ma_model/providers/Microsoft.Resources/deployments/OpenAICreate-20251219054956",
+  "name": "OpenAICreate-20251219054956",
+  "type": "Microsoft.Resources/deployments",
+  "properties": {
+    "templateHash": "14748328791225478354",
+    "parameters": {
+      "name": {
+        "type": "String",
+        "value": "ma-model-sher"
+      },
+      "location": {
+        "type": "String",
+        "value": "germanywestcentral"
+      },
+      "sku": {
+        "type": "String",
+        "value": "S0"
+      },
+      "tagValues": {
+        "type": "Object",
+        "value": {}
+      },
+      "virtualNetworkType": {
+        "type": "String",
+        "value": "None"
+      },
+      "vnet": {
+        "type": "Object",
+        "value": {}
+      },
+      "ipRules": {
+        "type": "Array",
+        "value": []
+      },
+      "privateEndpoints": {
+        "type": "Array",
+        "value": []
+      },
+      "privateDnsZone": {
+        "type": "String",
+        "value": "privatelink.openai.azure.com"
+      },
+      "resourceGroupName": {
+        "type": "String",
+        "value": "ma_model"
+      },
+      "resourceGroupId": {
+        "type": "String",
+        "value": "/subscriptions/cda14b30-c2d9-4241-a4b1-e1cb32352f7e/resourceGroups/ma_model"
+      },
+      "uniqueId": {
+        "type": "String",
+        "value": "173af76e-704c-45ca-86b9-665b4f233015"
+      },
+      "storedCompletionsDisabled": {
+        "type": "Bool",
+        "value": false
+      }
+    },
+    "mode": "Incremental",
+    "debugSetting": {
+      "detailLevel": "None"
+    },
+    "provisioningState": "Succeeded",
+    "timestamp": "2025-12-19T05:02:53.8615561Z",
+    "duration": "PT26.6488794S",
+    "correlationId": "44930d28-12e1-4cb1-94cc-1ccfe18644ae",
+    "providers": [
+      {
+        "namespace": "Microsoft.CognitiveServices",
+        "resourceTypes": [
+          {
+            "resourceType": "accounts",
+            "locations": [
+              "germanywestcentral"
+            ]
+          }
+        ]
+      }
+    ],
+    "dependencies": [],
+    "outputResources": [
+      {
+        "id": "/subscriptions/cda14b30-c2d9-4241-a4b1-e1cb32352f7e/resourceGroups/ma_model/providers/Microsoft.CognitiveServices/accounts/ma-model-sher"
+      }
+    ],
+    "validationLevel": "Template"
+  },
+  "tags": {
+    "primaryResourceId": "/subscriptions/cda14b30-c2d9-4241-a4b1-e1cb32352f7e/resourceGroups/ma_model/providers/Microsoft.CognitiveServices/accounts/ma-model-sher"
+  }
+}

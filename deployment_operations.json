@@ -1,0 +1,31 @@
+[
+  {
+    "id": "/subscriptions/cda14b30-c2d9-4241-a4b1-e1cb32352f7e/resourceGroups/ma_model/providers/Microsoft.Resources/deployments/OpenAICreate-20251219054956/operations/E9A56C9AE9C2FFC5",
+    "operationId": "E9A56C9AE9C2FFC5",
+    "properties": {
+      "provisioningOperation": "Create",
+      "provisioningState": "Succeeded",
+      "timestamp": "2025-12-19T05:02:29.6837503Z",
+      "duration": "PT23.9120346S",
+      "trackingId": "471d6b12-9727-4978-8041-5a5a5fca7974",
+      "statusCode": "OK",
+      "targetResource": {
+        "id": "/subscriptions/cda14b30-c2d9-4241-a4b1-e1cb32352f7e/resourceGroups/ma_model/providers/Microsoft.CognitiveServices/accounts/ma-model-sher",
+        "resourceType": "Microsoft.CognitiveServices/accounts",
+        "resourceName": "ma-model-sher"
+      }
+    }
+  },
+  {
+    "id": "/subscriptions/cda14b30-c2d9-4241-a4b1-e1cb32352f7e/resourceGroups/ma_model/providers/Microsoft.Resources/deployments/OpenAICreate-20251219054956/operations/08584354863382608938",
+    "operationId": "08584354863382608938",
+    "properties": {
+      "provisioningOperation": "EvaluateDeploymentOutput",
+      "provisioningState": "Succeeded",
+      "timestamp": "2025-12-19T05:02:29.6837503Z",
+      "duration": "PT24.1307873S",
+      "trackingId": "4525b2a8-edbd-483f-9c8e-3a26cb96b395",
+      "statusCode": "OK"
+    }
+  }
+]
