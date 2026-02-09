@@ -1,4 +1,4 @@
-# llm-pick-me-bots
+# LLM-Controlled-Robots
 
 ROS-based simulation environment for LIMO Cobot robots with LLM integration capabilities.
 
