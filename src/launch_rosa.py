@@ -55,16 +55,28 @@ if not OPENAI_API_KEY:
 # Create an LLM client for ROSA; allow overriding model via ROSA_MODEL env var
 llm = ChatOpenAI(model=os.environ.get("ROSA_MODEL", "gpt-4o"), temperature=0, api_key=OPENAI_API_KEY)
 
+from tools.turn_in_place import turn_in_place
+
 # Instantiate ROSA and tell it to load tools from the local `tools` package
-agent = ROSA(ros_version=1, llm=llm, tool_packages=["tools"], streaming=False, verbose=True)
+agent = ROSA(
+    ros_version=1,
+    llm=llm,
+    tools=[turn_in_place],          # <-- force include your tool
+    tool_packages=["tools"],        # optional; keep if you want package discovery too
+    blacklist=["rosservice_list"],  # <-- disable the buggy tool
+    streaming=False,
+    verbose=True,
+)
 
-import inspect
-print("ROSA init signature:", inspect.signature(ROSA.__init__))
-
-# What tools did ROSA load internally?
-print("ROSA __tools type:", type(agent._ROSA__tools))
-print("ROSA __tools:", agent._ROSA__tools)
-print("ROSA _get_tools():", agent._get_tools())
+# ROSATools usually exposes a list-like or a .tools attribute; handle both safely
+rt = agent._ROSA__tools
+tool_list = getattr(rt, "tools", None) or getattr(rt, "_tools", None) or rt
+try:
+    names = [getattr(t, "name", str(t)) for t in tool_list]
+except TypeError:
+    # if rt isn't iterable, fall back to dir()
+    names = [a for a in dir(rt) if "tool" in a.lower()]
+print("Resolved tool names:", names)
 
 def repl():
     print("ROSA agent ready. Type a question (or 'exit' to quit).")
