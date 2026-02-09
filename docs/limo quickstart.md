@@ -8,7 +8,10 @@ Loginto the limo cobot with no machine. Start terminal and execute:
 roslaunch limo_rosa_bridge rosa_bridge.launch
 ```
 
-If the package cannot be found try the following command:
+If the package cannot be found try to rebuild the package:
 ```bash
-source ~/llm-controled-robots/catkin_ws/devel/setup.bash
+cd ~/llm-controlled-robots/catkin_ws
+rm -rf build devel   # optional but strongly recommended after moves
+catkin_make
+source devel/setup.bash
 ```
