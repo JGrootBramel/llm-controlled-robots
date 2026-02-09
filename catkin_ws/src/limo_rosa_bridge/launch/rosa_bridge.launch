@@ -1,0 +1,7 @@
+<launch>
+    <include file="$(find limo_bringup)/launch/limo_start.launch" />
+
+    <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" />
+
+    <node name="rosa_executioner" pkg="limo_rosa_bridge" type="simple_mover.py" output="screen" />
+</launch>
