@@ -1,6 +1,6 @@
 # Installation Guide
 
-This guide will help you set up the complete simulation environment for llm-pick-me-bots.
+This guide will help you set up the complete simulation environment for llm-controlled-robots.
 
 ## Prerequisites
 
