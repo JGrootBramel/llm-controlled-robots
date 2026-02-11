@@ -1,7 +1,31 @@
 <launch>
-    <include file="$(find limo_bringup)/launch/limo_start.launch" />
 
-    <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" />
+  <!-- Robot -->
+  <include file="$(find limo_bringup)/launch/limo_start.launch" />
 
-    <node name="rosa_executioner" pkg="limo_rosa_bridge" type="simple_mover.py" output="screen" />
+  <!-- Robot state (URDF → TF → KDL) -->
+  <node
+    pkg="robot_state_publisher"
+    type="robot_state_publisher"
+    name="robot_state_publisher" />
+
+  <!-- Rosbridge (LLM / Django / Web) -->
+  <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch">
+    <arg name="port" value="9090"/>
+  </include>
+
+  <!-- Existing executor -->
+  <node
+    name="rosa_executioner"
+    pkg="limo_rosa_bridge"
+    type="simple_mover.py"
+    output="screen" />
+
+  <!-- PyKDL tools -->
+  <node
+    name="pykdl_tools"
+    pkg="limo_rosa_bridge"
+    type="pykdl_tools.py"
+    output="screen" />
+
 </launch>
