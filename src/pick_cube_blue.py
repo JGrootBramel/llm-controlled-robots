@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Blue cube finder + front grasp (RGB-D)
-PyKDL-FREE / tf2_geometry_msgs-FREE
+Blue cube finder + front grasp (RGB-D).
+No PyKDL or tf2_geometry_msgs dependencies.
 """
 
 import numpy as np
@@ -13,8 +13,7 @@ import tf2_ros
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import PointStamped
-from tf.transformations import quaternion_matrix
-from pymycobot import MyCobot280
+from std_msgs.msg import Int32, Float64MultiArray
 
 
 # ---------- PURE NUMPY TF ----------
@@ -38,15 +37,11 @@ class BlueCubeGrasper:
 
         # ---- Parameters ----
         self.base_frame = rospy.get_param("~base_frame", "base_link")
-        self.camera_frame = rospy.get_param(
-            "~camera_frame", "camera_depth_optical_frame"
-        )
+        self.camera_frame = rospy.get_param("~camera_frame", "camera_depth_optical_frame")
 
         self.rgb_topic = rospy.get_param("~rgb_topic", "/camera/color/image_raw")
         self.depth_topic = rospy.get_param("~depth_topic", "/camera/depth/image_raw")
-        self.info_topic = rospy.get_param(
-            "~info_topic", "/camera/color/camera_info"
-        )
+        self.info_topic = rospy.get_param("~info_topic", "/camera/color/camera_info")
 
         self.depth_min = rospy.get_param("~depth_min", 0.10)
         self.depth_max = rospy.get_param("~depth_max", 2.50)
@@ -59,13 +54,15 @@ class BlueCubeGrasper:
         self.s_low = rospy.get_param("~s_low", 50)
         self.v_low = rospy.get_param("~v_low", 50)
 
-        # ---- Robot ----
-        port = rospy.get_param("~port", "/dev/ttyACM0")
-        # baud = rospy.get_param("~baud", 115200)
-        self.mc = RosBridgeClient(ip="192.168.0.105", port=9090)
+        # ---- Robot via ROS topics ----
+        self.joint_pub = rospy.Publisher("/mycobot/joint_angles", Float64MultiArray, queue_size=1)
+        self.coord_pub = rospy.Publisher("/mycobot/coords", Float64MultiArray, queue_size=1)
+        self.gripper_pub = rospy.Publisher("/mycobot/gripper", Int32, queue_size=1)
 
-        # Safe pose
-        self.mc.send_angles([-90, 0, -10, -90, 0, 57], 50)
+        rospy.sleep(1.0)  # let publishers connect
+
+        # Move to safe pose
+        self.send_angles([-90, 0, -10, -90, 0, 57], speed=50)
 
         # ---- TF ----
         self.tfbuf = tf2_ros.Buffer(rospy.Duration(10.0))
@@ -87,7 +84,21 @@ class BlueCubeGrasper:
         )
         sync.registerCallback(self.callback)
 
-        rospy.loginfo("BlueCubeGrasper ready (PyKDL-free)")
+        rospy.loginfo("BlueCubeGrasper ready (ROS bridge)")
+
+    # ---------- ROS-based functions ----------
+    def send_angles(self, angles, speed=50):
+        msg = Float64MultiArray(data=angles + [speed])
+        self.joint_pub.publish(msg)
+
+    def send_coords(self, coords, speed=40):
+        msg = Float64MultiArray(data=coords + [speed])
+        self.coord_pub.publish(msg)
+
+    def set_gripper_state(self, state, speed=80):
+        # state = 0 (open), 1 (close)
+        msg = Int32(data=state)
+        self.gripper_pub.publish(msg)
 
     # ---------- CALLBACK ----------
     def callback(self, rgb_msg, depth_msg, info_msg):
@@ -198,11 +209,11 @@ class BlueCubeGrasper:
         )
 
         try:
-            self.mc.set_gripper_state(0, 80)
-            self.mc.send_coords([X, Y + 30, Z, -110, 45, 165], 40)
-            self.mc.send_coords([X, Y, Z, -110, 45, 165], 40)
-            self.mc.set_gripper_state(1, 80)
-            self.mc.send_angles([-77, -50, -40, 100, -5, 52], 50)
+            self.set_gripper_state(0, speed=80)
+            self.send_coords([X, Y + 30, Z, -110, 45, 165], speed=40)
+            self.send_coords([X, Y, Z, -110, 45, 165], speed=40)
+            self.set_gripper_state(1, speed=80)
+            self.send_angles([-77, -50, -40, 100, -5, 52], speed=50)
         except Exception as e:
             rospy.logerr("Grasp failed: %s", e)
 
@@ -210,4 +221,5 @@ class BlueCubeGrasper:
 if __name__ == "__main__":
     BlueCubeGrasper()
     rospy.spin()
+
 
