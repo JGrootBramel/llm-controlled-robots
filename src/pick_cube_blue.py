@@ -61,8 +61,8 @@ class BlueCubeGrasper:
 
         # ---- Robot ----
         port = rospy.get_param("~port", "/dev/ttyACM0")
-        baud = rospy.get_param("~baud", 115200)
-        self.mc = MyCobot280(port, baud)
+        # baud = rospy.get_param("~baud", 115200)
+        self.mc = RosBridgeClient(ip="192.168.0.105", port=9090)
 
         # Safe pose
         self.mc.send_angles([-90, 0, -10, -90, 0, 57], 50)
