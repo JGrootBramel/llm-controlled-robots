@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 import rospy
-from std_msgs.msg import String
 import PyKDL
+import kdl_parser_py.urdf as kdl_parser
 
 def main():
-    rospy.init_node('rosa_executioner', anonymous=True)
-    
-    pub = rospy.Publisher('/rosa/test', String, queue_size=10)
-    
-    rate = rospy.Rate(1)  # 1 Hz
-    while not rospy.is_shutdown():
-        msg = "Hello from simple_mover"
-        rospy.loginfo(msg)
-        pub.publish(msg)
-        rate.sleep()
+    rospy.init_node('rosa_executioner')
+
+    robot = rospy.get_param('/robot_description', None)
+    if robot is None:
+        rospy.logerr("No /robot_description found!")
+        return
+
+    ok, tree = kdl_parser.treeFromUrdfString(robot)
+    if ok:
+        rospy.loginfo("KDL Tree successfully parsed")
+    else:
+        rospy.logerr("Failed to parse KDL Tree")
 
 if __name__ == '__main__':
     try:
