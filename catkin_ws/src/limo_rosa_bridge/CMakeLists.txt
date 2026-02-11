@@ -8,11 +8,14 @@ project(limo_rosa_bridge)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  geometry_msgs
-  rosbridge_server
   rospy
   std_msgs
+  geometry_msgs
+  rosbridge_server
+  urdf_parser_py
+  kdl_parser_py
 )
+
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
