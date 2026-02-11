@@ -30,4 +30,12 @@
     type="pykdl_tools.py"
     output="screen" />
 
+  <node
+    name="simple_mover"
+    pkg="limo_llm"
+    type="simple_mover.py"
+    output="screen"
+  />
+
+
 </launch>
