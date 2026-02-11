@@ -12,8 +12,17 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   geometry_msgs
   rosbridge_server
-  urdf_parser_py
-  kdl_parser_py
+  # urdf_parser_py
+  # kdl_parser_py
+)
+
+catkin_package(
+  CATKIN_DEPENDS
+    rospy
+    std_msgs
+    geometry_msgs
+    # urdf_parser_py
+    # kdl_parser_py
 )
 
 catkin_install_python(
@@ -21,16 +30,6 @@ catkin_install_python(
     scripts/simple_mover.py
     scripts/pykdl_tools.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
-
-
-catkin_package(
-  CATKIN_DEPENDS
-    rospy
-    std_msgs
-    geometry_msgs
-    urdf_parser_py
-    kdl_parser_py
 )
 
 ## System dependencies are found with CMake's conventions
