@@ -16,6 +16,22 @@ find_package(catkin REQUIRED COMPONENTS
   kdl_parser_py
 )
 
+catkin_install_python(
+  PROGRAMS
+    scripts/simple_mover.py
+    scripts/pykdl_tools.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+
+catkin_package(
+  CATKIN_DEPENDS
+    rospy
+    std_msgs
+    geometry_msgs
+    urdf_parser_py
+    kdl_parser_py
+)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
