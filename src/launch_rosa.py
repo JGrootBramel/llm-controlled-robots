@@ -42,11 +42,11 @@ except Exception as e:  # pragma: no cover - vendor package may vary
     print("Failed to import 'rosa' package. Ensure vendor/rosa or venv has rosa installed.")
     raise
 
-# Ensure the local `tools` package is importable so ROSA can discover tool modules.
+# Tools: re-exported from limo_llm_control.tools (motion, navigation, perception, diagnostics; rospy).
 try:
-    import tools  # noqa: F401
+    import tools  # noqa: F401  # backward compat: tools re-exports from limo_llm_control.tools
 except Exception as e:
-    print("Warning: could not import local 'tools' package:", e)
+    print("Warning: could not import 'tools' (limo_llm_control.tools):", e)
 
 OPENAI_API_KEY: Optional[str] = os.environ.get("OPENAI_API_KEY")
 if not OPENAI_API_KEY:

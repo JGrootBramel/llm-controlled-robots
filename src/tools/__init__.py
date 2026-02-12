@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-Custom ROSA tools package for the LIMO cobot.
+Re-export ROSA tools from limo_llm_control.tools (canonical location).
 
-Each tool lives in its own module (e.g. `turn_in_place.py`) and is re‑exported
-here so ROSA can discover them when /src/tools is on PYTHONPATH.
+This package exists for backward compatibility. New code should use
+limo_llm_control.tools and run via `python -m limo_llm_control.main`.
+All tools use rospy for communication (see docs/architecture/communication-options_robot-remote_pc.md).
 """
 
-from .limo_autonomy_tools import (
+from limo_llm_control.tools import (
+    drive_distance,
     get_autonomy_status,
     reset_cam_coverage,
     start_blue_cube_grasper_node,
@@ -15,12 +17,13 @@ from .limo_autonomy_tools import (
     start_object_finder_node,
     start_straight_planner_node,
     stop_autonomy_nodes,
+    turn_in_place,
     update_object_query,
 )
-from .turn_in_place import turn_in_place
 
 __all__ = [
     "turn_in_place",
+    "drive_distance",
     "start_cam_coverage_node",
     "reset_cam_coverage",
     "start_frontier_planner_node",
