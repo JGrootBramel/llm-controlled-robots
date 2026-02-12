@@ -42,7 +42,7 @@ Remote PC talks to the robot via rosbridge (typically on port 9090) using roslib
 - You cannot reliably join the robot ROS master with native ROS1 networking
 - Your interactions are discrete and low-bandwidth (commands, status queries)
 
-**Option C — Hybrid (common and pragmatic)**
+## Option C — Hybrid (common and pragmatic)
 
 - Use native ROS1 for high-rate/real-time and core robotics interfaces
 - Use rosbridge only for UI/telemetry or limited remote calls
