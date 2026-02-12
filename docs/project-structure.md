@@ -1,3 +1,5 @@
+# Project Structure
+```
 llm-controlled-robots/
 ├─ README.md
 ├─ LICENSE
@@ -80,3 +82,4 @@ llm-controlled-robots/
 │
 └─ third_party/                    # pinned external assets if needed
    └─ README.md
+```
