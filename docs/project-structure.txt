@@ -1,0 +1,82 @@
+llm-controlled-robots/
+├─ README.md
+├─ LICENSE
+├─ .gitignore
+├─ .editorconfig
+├─ .env.example
+├─ docs/
+│  ├─ architecture-robot-remote.md
+│  ├─ network-setup.md
+│  ├─ troubleshooting.md
+│  ├─ ros-interfaces.md
+│  └─ demos/
+│     ├─ teleop.md
+│     └─ object-detection.md
+│
+├─ scripts/
+│  ├─ bootstrap_remote.sh
+│  ├─ bootstrap_robot.sh
+│  ├─ run_remote.sh
+│  ├─ run_robot.sh
+│  ├─ run_sim.sh
+│  ├─ check_ros_network.sh
+│  └─ lint_format.sh
+│
+├─ catkin_ws/                      # everything that must run on robot (ROS1)
+│  ├─ src/
+│  │  ├─ limo_bringup/             # your launch + params wrapping vendor nodes
+│  │  ├─ limo_rosa_bridge/         # ROS interfaces used by ROSA tools
+│  │  ├─ perception/               # robot-side perception nodes (if any)
+│  │  └─ ... other robot pkgs ...
+│  ├─ launch/                      # optional: top-level launch aggregators
+│  ├─ docker/                      # optional: build a ROS image for CI
+│  ├─ .rosinstall                  # optional: vcs repos file instead
+│  └─ README.md                    # robot-side build/run instructions
+│
+├─ src/                            # remote PC code (Python 3.9+, ROSA, LLM)
+│  ├─ limo_llm_control/
+│  │  ├─ __init__.py
+│  │  ├─ main.py                   # main entrypoint
+│  │  ├─ config/
+│  │  │  ├─ default.yaml
+│  │  │  └─ profiles/
+│  │  │     ├─ robot.yaml
+│  │  │     └─ sim.yaml
+│  │  ├─ tools/                    # ROSA tools (capability wrappers)
+│  │  │  ├─ motion.py
+│  │  │  ├─ navigation.py
+│  │  │  ├─ perception.py
+│  │  │  └─ diagnostics.py
+│  │  ├─ ros_clients/              # impl: native ROS or rosbridge
+│  │  │  ├─ rosbridge_client.py
+│  │  │  └─ ros1_client.py
+│  │  ├─ prompts/                  # system prompts, tool descriptions
+│  │  ├─ policies/                 # task policies / safety constraints
+│  │  └─ utils/
+│  ├─ tests/
+│  ├─ pyproject.toml               # preferred (poetry/uv/pip-tools ok)
+│  ├─ requirements.txt             # if you want classic pip
+│  └─ README.md                    # remote-side run instructions
+│
+├─ sim/                            # gazebo classic + simulation glue
+│  ├─ docker/
+│  │  ├─ Dockerfile
+│  │  ├─ docker-compose.yml
+│  │  └─ entrypoint.sh
+│  ├─ worlds/
+│  ├─ models/
+│  ├─ launch/
+│  ├─ config/
+│  └─ README.md
+│
+├─ docker/                         # (optional) shared docker assets
+│  ├─ base.Dockerfile
+│  └─ compose.common.yml
+│
+├─ ci/                             # GitHub Actions / CI scripts
+│  ├─ ros_noetic_build.yml
+│  ├─ python_tests.yml
+│  └─ docker_build.yml
+│
+└─ third_party/                    # pinned external assets if needed
+   └─ README.md
