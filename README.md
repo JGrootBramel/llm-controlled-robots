@@ -1,110 +1,153 @@
-# LLM-Controlled-Robots
+# LLM-Controlled LIMO Cobot (ROS1 + ROSA)
 
-ROS-based simulation environment for LIMO Cobot robots with LLM integration capabilities.
+This repository contains everything required to reproduce our project:\
+controlling an AgileX LIMO Cobot (ROS1 Noetic, Ubuntu 20.04, Python
+3.8)\
+using an LLM (GPT-4 class model) via ROSA (NASA JPL) running on a remote
+PC.
 
-## Quick Start
+The system is intentionally split into:
 
-1. **Install Docker** (if not already installed):
-   ```bash
-   sudo apt update && sudo apt install -y docker.io
-   sudo systemctl start docker
-   sudo usermod -aG docker $USER
-   # Log out and log back in
-   ```
+-   🟢 Robot side (ROS1 Noetic, Python 3.8) → hardware, drivers,
+    perception, capability APIs\
+-   🔵 Remote side (Python 3.9+) → ROSA tools, LLM orchestration,
+    high-level task logic\
+-   🟡 Simulation (Gazebo Classic via Docker) → reproducible testing
+    without hardware
 
-2. **Run the setup script**:
-   ```bash
-   ./setup.sh
-   ```
+------------------------------------------------------------------------
 
-3. **Start the simulation**:
-   ```bash
-   ./run_simulation.sh
-   ```
+# 1. Architecture Overview
 
-4. **Run the ROSA natural-language controller (inside the container)**:
-   - Open a new terminal (keep the simulation terminal running)
-   - Find the container id: `sudo docker ps`
-   - Enter the container: `sudo docker exec -it <CONTAINER_ID> /bin/bash`
-   - Run:
-     ```bash
-     bash /workspace/llm-pick-me-bots/start_rosa.sh
-     ```
+## Deployment View
 
-**Windows note**: Use WSL2 (recommended). See the Windows section in `docs/ROSA_INTEGRATION.md`.
+Robot: - Drivers & Controllers - Sensors (Camera, LiDAR, IMU) -
+Perception Nodes - Capability Interfaces (services/actions/topics) - ROS
+Master
 
-## Documentation
+Remote PC: - ROSA Tools - LLM Orchestrator - Monitoring / UI
 
-- **[Installation Guide](INSTALL.md)** - Detailed setup instructions
-- **[ROSA Integration](docs/ROSA_INTEGRATION.md)** - Natural language robot control with ROSA
-- **[Standard Control Methods](docs/STANDARD_CONTROL_METHODS.md)** - Use GUI sliders and standard ROS tools
-- **[Controller Usage](docs/CONTROLLER_USAGE.md)** - Custom keyboard controller
-- **[Simulation Guide](docs/Simulation%20in%20ROS1%20and%20Gazebo%20Classic.md)** - ROS1 and Gazebo Classic simulation
-- **[Troubleshooting](docs/troubleshooting/)** - Common issues and solutions
+Design Principles: - Robot exports capabilities, not raw perception. -
+Remote performs high-level reasoning. - High-rate perception runs on
+robot. - ROSA tools call structured ROS services/actions.
 
-## ROS Distribution
+------------------------------------------------------------------------
 
-- **ROS Noetic (ROS1)** - Required for this project
-  - Uses Docker to run on Ubuntu 20.04 (required for ROS 1)
-  - Works on Ubuntu 22.04 host via Docker
-  - Gazebo Classic simulation
-  - MoveIt motion planning
-  - ROSA (jpl-rosa) Python package for LLM control
-
-## Features
-
-- Pre-configured Docker image with all dependencies
-- LIMO mobile robot simulation
-- MyCobot robotic arm integration
-- Gazebo Classic simulation
-- MoveIt motion planning
-- **ROSA (jpl-rosa)** - Natural language robot control with LLM integration
-- **ROSA (jpl-rosa)** - Natural language robot control (✅ Integrated)
-- **Standard ROS control tools**:
-  - `rqt_robot_steering` - GUI sliders for base control
-  - `teleop_twist_keyboard` - Keyboard control for base
-  - `joint_state_publisher_gui` - GUI sliders for arm joints
-  - MoveIt in RViz - Interactive arm planning
-- Custom robot controller script for keyboard control
-
-## Project Structure
-
+# 2. Repository Structure
 ```
-llm-pick-me-bots/
-├── Dockerfile.noetic      # ROS Noetic + Gazebo Classic + ROSA
-├── setup.sh               # Automated setup script
-├── setup_env.sh           # Setup API keys for ROSA
-├── run_simulation.sh      # Run simulation script
-├── start_rosa.sh          # Start ROSA controller
-├── cleanup_and_start.sh   # Cleanup and restart script
-├── INSTALL.md             # Installation guide
-├── README.md              # This file
-└── docs/                  # Documentation
-    ├── robot_controller.py        # Keyboard controller for robot
-    ├── rosa_robot_controller.py   # ROSA natural language controller
-    ├── diagnose_robot.py          # Diagnostic tool
-    ├── REPOSITORY_NOTES.md        # Notes from original repos
-    ├── ROSA_INTEGRATION.md        # ROSA integration guide
-    └── troubleshooting/           # Troubleshooting guides
+llm-controlled-robots/ 
+├─ catkin_ws/   # Robot-side ROS1 workspace 
+├─ src/         # Remote PC (ROSA + LLM application) 
+├─ sim/         # Gazebo Classic + Docker setup 
+├─ scripts/     # Bootstrap & run scripts 
+├─ docs/        #Architecture and interface documentation 
+├─ .env.example 
+└─ README.md
 ```
 
-## Requirements
+------------------------------------------------------------------------
 
-- **Host OS**: Ubuntu 20.04+ (tested with 22.04)
-  - Note: ROS 1 Noetic requires Ubuntu 20.04, but Docker allows running it on Ubuntu 22.04
-- **Docker**: Required for containerized ROS environment
-- **X11 display**: Required for GUI applications (Gazebo, RViz)
-- **Python 3.9+**: For ROSA library (installed in Docker container)
+# 3. System Requirements
 
-## Purpose
+## Robot
 
-This project provides a simulation environment for the LIMO Cobot robot to enable:
-- Development and testing of LLM-controlled robot behaviors
-- Working on robot control algorithms without physical robot access
-- Preparing code that can later be applied to the physical robot in the lab
+-   Ubuntu 20.04
+-   ROS Noetic
+-   Python 3.8
 
-The simulation uses ROS 1 Noetic with Gazebo Classic, and includes ROSA for natural language control integration. You can control the robot using commands like "move forward", "turn left", or "what is the robot's current state?".
+## Remote PC
 
-## License
+-   Python 3.9+
+-   Network access to robot
+-   OpenAI API key
 
-See [LICENSE](LICENSE) file for details.
+------------------------------------------------------------------------
+
+# 4. Quick Start
+
+## Robot
+
+cd catkin_ws\
+catkin_make\
+source devel/setup.bash
+
+roslaunch limo_bringup bringup.launch
+
+------------------------------------------------------------------------
+
+## Remote
+
+cd src\
+python3.9 -m venv venv\
+source venv/bin/activate\
+pip install -r requirements.txt
+
+Configure .env:
+
+OPENAI_API_KEY=your_key\
+ROS_MASTER_URI=http://`<robot_ip>`{=html}:11311\
+ROS_IP=`<remote_pc_ip>`{=html}
+
+Run:
+
+python -m limo_llm_control.main --profile robot
+
+------------------------------------------------------------------------
+
+## Simulation
+
+cd sim/docker\
+docker compose up --build
+
+Then:
+
+python -m limo_llm_control.main --profile sim
+
+------------------------------------------------------------------------
+
+# 5. Communication Options
+
+Option A --- Native ROS1 Networking (Recommended) - Full compatibility
+(topics/services/actions) - Requires correct ROS networking
+configuration
+
+Option B --- rosbridge - Easier across network boundaries - Not ideal
+for high-rate streams
+
+------------------------------------------------------------------------
+
+# 6. Capability API Contract
+
+Example interfaces:
+
+/detect_objects (Service) Returns list of detected objects with pose.
+
+/go_to_pose (Action) Input: PoseStamped
+
+/cmd_vel (Topic) Velocity control fallback.
+
+------------------------------------------------------------------------
+
+# 7. Reproducibility Checklist
+
+-   Build catkin_ws
+-   Verify ROS networking
+-   Install remote dependencies
+-   Configure .env
+-   Verify topics/services
+-   Run remote entrypoint
+-   Test motion
+-   Test perception
+
+------------------------------------------------------------------------
+
+# 8. Security Note
+
+ROS1 has no built-in security.\
+Use only in trusted LAN environments.
+
+------------------------------------------------------------------------
+
+# 9. License
+
+Specify your license here.
