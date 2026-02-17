@@ -44,19 +44,20 @@ class CamCoverage:
         self.range_m = rospy.get_param("~range_m", 1.5)
         self.camera_info_topic = rospy.get_param("~camera_info_topic", "/camera/color/camera_info")
         self.camera_frame = rospy.get_param("~frame_camera", "camera_link")
+        self.have_caminfo = False
 
-        try:
-            msg = rospy.wait_for_message(self.camera_info_topic, CameraInfo, timeout=2.0)
-            self._apply_caminfo(msg)
+        # Subscribe continuously so late-starting camera drivers are handled gracefully.
+        self.caminfo_sub = rospy.Subscriber(
+            self.camera_info_topic,
+            CameraInfo,
+            self.camera_info_cb,
+            queue_size=1,
+        )
 
-            if self.camera_frame in ("auto", "", None):
-                self.camera_frame = msg.header.frame_id or "camera_link"
-
-            rospy.loginfo("[cam_coverage] CameraInfo: fx=%.2f, width=%d, FOV=%.1f° (frame=%s)",
-                        self.fx, self.width, math.degrees(self.fov), self.camera_frame)
-        except rospy.ROSException:
-            rospy.logwarn("[cam_coverage] No CameraInfo %s (timeout) – using defaults fx=%.2f, width=%d",
-                        self.camera_info_topic, self.fx, self.width)
+        rospy.loginfo(
+            "[cam_coverage] Waiting for CameraInfo on %s (using defaults until first msg)",
+            self.camera_info_topic,
+        )
 
         self.timer = rospy.Timer(rospy.Duration(0.2), self.tick)  # 5 Hz
 
@@ -87,6 +88,24 @@ class CamCoverage:
             self.fx = msg.K[0]
             
         self.fov = 2.0 * math.atan((self.width * 0.5) / self.fx)
+
+    def camera_info_cb(self, msg: CameraInfo):
+        """
+        CameraInfo callback to keep camera intrinsics/FOV up to date.
+        """
+        self._apply_caminfo(msg)
+        if self.camera_frame in ("auto", "", None):
+            self.camera_frame = msg.header.frame_id or "camera_link"
+
+        if not self.have_caminfo:
+            self.have_caminfo = True
+            rospy.loginfo(
+                "[cam_coverage] CameraInfo received: fx=%.2f, width=%d, FOV=%.1f° (frame=%s)",
+                self.fx,
+                self.width,
+                math.degrees(self.fov),
+                self.camera_frame,
+            )
 
     def tick(self, _):
         """
