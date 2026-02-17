@@ -48,6 +48,27 @@ _PROCESS_META: Dict[str, dict] = {}
 _PROCESS_LOG_HANDLES: Dict[str, Any] = {}
 _LOCK = threading.Lock()
 
+NODE_TO_ROSNODES: Dict[str, list[str]] = {
+    "cam_coverage": ["/cam_coverage_node"],
+    "frontier_planner": ["/frontier_goal_selector"],
+    "straight_planner": ["/straight_explore_planner"],
+    "object_finder": ["/object_finder"],
+    "blue_cube_grasper": ["/blue_cube_grasper"],
+}
+
+LAUNCH_MANAGED_DEFAULT = "true"
+
+
+def is_launch_managed_mode() -> bool:
+    """
+    Return True when tooling should treat autonomy nodes as launch-managed.
+
+    In launch-managed mode, ROSA tools do not spawn/kill node processes directly.
+    They only command/query ROS topics/services and report runtime state.
+    """
+    raw = os.environ.get("LIMO_AUTONOMY_LAUNCH_MANAGED", LAUNCH_MANAGED_DEFAULT).strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
 
 def _remote_cfg() -> Dict[str, Any]:
     """
@@ -387,10 +408,41 @@ def _build_ros_private_param_args(params: Dict[str, object]) -> list:
     return args
 
 
+def _safe_rosnode_list() -> list[str]:
+    """
+    Read active node names from rosnode list, returning [] on failure.
+    """
+    try:
+        out = subprocess.check_output(["rosnode", "list"], text=True, stderr=subprocess.STDOUT, timeout=3.0)
+        return [line.strip() for line in out.splitlines() if line.strip()]
+    except Exception:
+        return []
+
+
+def _launch_managed_start(node_key: str, params: Dict[str, object]) -> str:
+    """
+    Launch-managed mode "start": no process spawn, only state guidance.
+    """
+    active_nodes = set(_safe_rosnode_list())
+    expected = NODE_TO_ROSNODES.get(node_key, [])
+    is_active = any(n in active_nodes for n in expected)
+    if is_active:
+        return (
+            f"Launch-managed mode: '{node_key}' is already active via robot launch "
+            f"(matched nodes: {expected})."
+        )
+    return (
+        f"Launch-managed mode: '{node_key}' was not spawned by tool. "
+        f"Start it from robot launch files (for example via `rosa_bridge.launch` or dedicated launch)."
+    )
+
+
 def spawn_node(node_key: str, params: Dict[str, object]) -> str:
     """Spawn one autonomy node process; replace existing if already running."""
     if node_key not in NODE_SCRIPTS:
         return f"Unknown node key '{node_key}'. Valid keys: {sorted(NODE_SCRIPTS.keys())}."
+    if is_launch_managed_mode():
+        return _launch_managed_start(node_key, params)
     cfg = _remote_cfg()
     if cfg["mode"] == "ssh":
         return _remote_spawn_node(node_key, params)
@@ -399,6 +451,11 @@ def spawn_node(node_key: str, params: Dict[str, object]) -> str:
 
 def stop_node(node_key: str) -> str:
     """Stop one node process if active."""
+    if is_launch_managed_mode():
+        return (
+            f"Launch-managed mode: stop for '{node_key}' is a no-op. "
+            "Use robot launch/node lifecycle control on the robot host."
+        )
     local_process_key = _resolve_local_process_key(node_key)
     with _LOCK:
         meta = _PROCESS_META.get(local_process_key, {})
@@ -435,6 +492,11 @@ def stop_node(node_key: str) -> str:
 
 def stop_all_nodes() -> str:
     """Stop all managed autonomy node subprocesses."""
+    if is_launch_managed_mode():
+        return (
+            "Launch-managed mode: stop_all is a no-op. "
+            "Use robot launch/node lifecycle control on the robot host."
+        )
     with _LOCK:
         keys = list(_PROCESSES.keys())
         remote_only = [k for k, v in _PROCESS_META.items() if v.get("exec_mode") == "ssh" and k not in _PROCESSES]
@@ -458,6 +520,21 @@ def call_reset_cam_coverage() -> str:
 
 def get_managed_processes_snapshot() -> Dict[str, dict]:
     """Return snapshot of managed process state (caller holds or doesn't need lock)."""
+    if is_launch_managed_mode():
+        active_nodes = set(_safe_rosnode_list())
+        snapshot = {}
+        for node_key, expected_nodes in NODE_TO_ROSNODES.items():
+            matched = [n for n in expected_nodes if n in active_nodes]
+            snapshot[node_key] = {
+                "pid": None,
+                "alive": len(matched) > 0,
+                "started_unix_s": None,
+                "log_file": None,
+                "exec_mode": "launch_managed",
+                "matched_nodes": matched,
+            }
+        return snapshot
+
     with _LOCK:
         snapshot = {}
         # Local processes

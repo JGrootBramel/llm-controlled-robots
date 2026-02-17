@@ -57,7 +57,12 @@ def start_object_finder_node(
         "publish_debug": bool(publish_debug),
         "show_debug_window": bool(show_debug_window),
     }
-    return runner.spawn_node("object_finder", params)
+    start_msg = runner.spawn_node("object_finder", params)
+    # In launch-managed mode we still apply the query prompt dynamically.
+    if runner.is_launch_managed_mode():
+        query_msg = update_object_query(prompt)
+        return f"{start_msg} {query_msg}"
+    return start_msg
 
 
 @tool

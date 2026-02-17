@@ -11,6 +11,11 @@ This runbook covers robot-side setup and validation for the hybrid autonomy stac
 Run on the robot:
 
 ```bash
+cd ~/llm-controlled-robots
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements-robot.txt
+
 cd ~/llm-controlled-robots/catkin_ws
 catkin_make
 source devel/setup.bash
@@ -44,7 +49,14 @@ On your remote PC:
 
 ```bash
 cd ~/llm-controlled-robots
+source /opt/ros/noetic/setup.bash
+source catkin_ws/devel/setup.bash
 source venv/bin/activate
+pip install -r requirements-remote.txt
+
+# Solution 1: treat autonomy as launch-managed on robot; ROSA tools only command/query.
+export LIMO_AUTONOMY_LAUNCH_MANAGED=true
+
 python src/launch_rosa.py
 ```
 
