@@ -3,5 +3,10 @@
 
     <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" />
 
-    <node name="rosa_executioner" pkg="limo_rosa_bridge" type="simple_mover.py" output="screen" />
+    <!-- Always-on autonomy core: coverage + one planner -->
+    <include file="$(find limo_rosa_bridge)/launch/autonomy_core.launch">
+      <arg name="use_frontier_planner" value="true" />
+      <arg name="use_straight_planner" value="false" />
+    </include>
+
 </launch>

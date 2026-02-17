@@ -8,10 +8,20 @@ project(limo_rosa_bridge)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+  actionlib
+  actionlib_msgs
   geometry_msgs
+  map_msgs
+  move_base_msgs
+  nav_msgs
   rosbridge_server
   rospy
+  sensor_msgs
   std_msgs
+  std_srvs
+  tf
+  tf2_geometry_msgs
+  tf2_ros
 )
 
 ## System dependencies are found with CMake's conventions
@@ -106,7 +116,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES limo_rosa_bridge
-#  CATKIN_DEPENDS geometry_msgs rosbridge_server rospy std_msgs
+#  CATKIN_DEPENDS actionlib actionlib_msgs geometry_msgs map_msgs move_base_msgs nav_msgs rosbridge_server rospy sensor_msgs std_msgs std_srvs tf tf2_geometry_msgs tf2_ros
 #  DEPENDS system_lib
 )
 
@@ -160,10 +170,14 @@ include_directories(
 
 ## Mark executable scripts (Python etc.) for installation
 ## in contrast to setup.py, you can choose the destination
-# catkin_install_python(PROGRAMS
-#   scripts/my_python_script
-#   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
+catkin_install_python(PROGRAMS
+  scripts/cam_coverage_node.py
+  scripts/frontier_planner_node.py
+  scripts/straight_planner_node.py
+  scripts/object_finder_node.py
+  scripts/pick_cube_blue_node.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
 ## Mark executables for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
@@ -187,11 +201,9 @@ include_directories(
 # )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
-# install(FILES
-#   # myfile1
-#   # myfile2
-#   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-# )
+install(DIRECTORY launch/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+)
 
 #############
 ## Testing ##

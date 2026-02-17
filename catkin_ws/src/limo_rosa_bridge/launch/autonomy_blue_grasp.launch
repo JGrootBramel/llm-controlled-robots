@@ -1,0 +1,20 @@
+<launch>
+  <!-- On-demand blue cube detector/grasper -->
+  <arg name="stable_hits" default="3" />
+  <arg name="depth_min" default="0.10" />
+  <arg name="depth_max" default="2.50" />
+  <arg name="min_area_px" default="900" />
+  <arg name="base_frame" default="base_link" />
+  <arg name="show_debug_window" default="true" />
+  <arg name="debug_window_name" default="blue_cube_debug" />
+
+  <node pkg="limo_rosa_bridge" type="pick_cube_blue_node.py" name="blue_cube_grasper" output="screen">
+    <param name="stable_hits" value="$(arg stable_hits)" />
+    <param name="depth_min" value="$(arg depth_min)" />
+    <param name="depth_max" value="$(arg depth_max)" />
+    <param name="min_area_px" value="$(arg min_area_px)" />
+    <param name="base_frame" value="$(arg base_frame)" />
+    <param name="show_debug_window" value="$(arg show_debug_window)" />
+    <param name="debug_window_name" value="$(arg debug_window_name)" />
+  </node>
+</launch>
