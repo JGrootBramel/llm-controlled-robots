@@ -64,7 +64,17 @@ print("ROSA init signature:", inspect.signature(ROSA.__init__))
 # What tools did ROSA load internally?
 print("ROSA __tools type:", type(agent._ROSA__tools))
 print("ROSA __tools:", agent._ROSA__tools)
-print("ROSA _get_tools():", agent._get_tools())
+tools_obj = agent._get_tools()
+print("tools_obj:", tools_obj)
+for attr in ("tools", "_tools", "langchain_tools"):
+    if hasattr(tools_obj, attr):
+        vals = getattr(tools_obj, attr)
+        try:
+            print(f"{attr} count:", len(vals))
+            for t in vals:
+                print(" -", getattr(t, "name", repr(t)))
+        except Exception:
+            print(f"{attr}:", vals)
 
 def repl():
     print("ROSA agent ready. Type a question (or 'exit' to quit).")
