@@ -119,6 +119,8 @@ class ObjectFinder:
         self.top_percentile   = rospy.get_param("~top_percentile", 90.0)
         self.grasp_z_lift     = rospy.get_param("~grasp_lift_m", 0.02)
         self.publish_debug    = rospy.get_param("~publish_debug", True)
+        self.show_debug_window = rospy.get_param("~show_debug_window", False)
+        self.debug_window_name = rospy.get_param("~debug_window_name", "object_finder_debug")
 
         # Trajectory logging
         self.traj_max_duration_sec = rospy.get_param("~traj_max_duration_sec", 6 * 60.0)
@@ -187,6 +189,8 @@ class ObjectFinder:
         self.pub_goal   = rospy.Publisher("/move_base_simple/goal", PoseStamped, queue_size=1)
         self.pub_cmd_vel = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
         self.pub_dbg    = (rospy.Publisher("/object_debug", Image, queue_size=1) if self.publish_debug else None)
+        if self.show_debug_window:
+            rospy.on_shutdown(self._close_debug_window)
 
         # Image + depth + camera info sync
         s_rgb   = message_filters.Subscriber(self.rgb_topic, Image)
@@ -1098,6 +1102,21 @@ class ObjectFinder:
             if pick is not None:
                 cv2.drawMarker(img, pick, (0,180,255), cv2.MARKER_CROSS, 20, 2)
             self.pub_dbg.publish(self.bridge.cv2_to_imgmsg(img, encoding="bgr8"))
+            if self.show_debug_window:
+                cv2.imshow(self.debug_window_name, img)
+                cv2.waitKey(1)
+        except Exception:
+            pass
+
+    def _close_debug_window(self):
+        """
+        Close OpenCV debug window on node shutdown.
+        """
+        if not self.show_debug_window:
+            return
+        try:
+            cv2.destroyWindow(self.debug_window_name)
+            cv2.waitKey(1)
         except Exception:
             pass
     

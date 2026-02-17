@@ -45,6 +45,8 @@ class BlueCubeGrasper:
 
         self.min_area_px = int(rospy.get_param("~min_area_px", 900))  # reject small blobs
         self.median_patch_px = int(rospy.get_param("~median_patch_px", 9))  # odd preferred
+        self.show_debug_window = rospy.get_param("~show_debug_window", False)
+        self.debug_window_name = rospy.get_param("~debug_window_name", "blue_cube_debug")
 
         # HSV thresholds for "blue"
         # Typical blue range (OpenCV H: 0..179). Tune if needed.
@@ -84,6 +86,8 @@ class BlueCubeGrasper:
             slop=0.12,
         )
         self.sync.registerCallback(self.cb)
+        if self.show_debug_window:
+            rospy.on_shutdown(self._close_debug_window)
 
         rospy.loginfo("blue_cube_grasper ready")
 
@@ -105,9 +109,11 @@ class BlueCubeGrasper:
 
         # Detect blue blob (largest)
         det = self._detect_blue_blob(rgb)
+        dbg = rgb.copy() if self.show_debug_window else None
         if det is None:
             self.hit_count = 0
             self.last_target_base = None
+            self._show_debug(dbg, None, None)
             return
 
         (u, v, area) = det
@@ -117,6 +123,7 @@ class BlueCubeGrasper:
         if Z is None or not (self.depth_min <= Z <= self.depth_max):
             self.hit_count = 0
             self.last_target_base = None
+            self._show_debug(dbg, (u, v), None)
             return
 
         # Project to camera coordinates
@@ -128,6 +135,7 @@ class BlueCubeGrasper:
         if p_base is None:
             self.hit_count = 0
             self.last_target_base = None
+            self._show_debug(dbg, (u, v), None)
             return
 
         # Simple stability gate
@@ -141,6 +149,7 @@ class BlueCubeGrasper:
             p_base[0], p_base[1], p_base[2],
             self.hit_count, self.require_stable_hits,
         )
+        self._show_debug(dbg, (u, v), int(area))
 
         if self.hit_count >= self.require_stable_hits:
             # Reset counter to avoid repeated grasps
@@ -249,6 +258,40 @@ class BlueCubeGrasper:
             return self.tfbuf.lookup_transform(target_frame, source_frame, stamp, rospy.Duration(timeout))
         except (tf2_ros.ExtrapolationException, tf2_ros.LookupException, tf2_ros.ConnectivityException):
             return self.tfbuf.lookup_transform(target_frame, source_frame, rospy.Time(0), rospy.Duration(timeout))
+
+    def _show_debug(self, img, uv, area):
+        """
+        Show live detection debug image on robot display.
+        """
+        if not self.show_debug_window or img is None:
+            return
+        try:
+            if uv is not None:
+                cv2.drawMarker(img, uv, (0, 255, 255), cv2.MARKER_CROSS, 18, 2)
+            if area is not None:
+                cv2.putText(
+                    img,
+                    f"blue area={int(area)} hits={self.hit_count}/{self.require_stable_hits}",
+                    (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (0, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+            cv2.imshow(self.debug_window_name, img)
+            cv2.waitKey(1)
+        except Exception:
+            pass
+
+    def _close_debug_window(self):
+        if not self.show_debug_window:
+            return
+        try:
+            cv2.destroyWindow(self.debug_window_name)
+            cv2.waitKey(1)
+        except Exception:
+            pass
 
     # ---- Grasp copied/adapted from your object_finder.py ----
     def do_grasp(self, X_arm_mm, Y_arm_mm, Z_arm_mm):

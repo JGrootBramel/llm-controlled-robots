@@ -25,6 +25,7 @@ def start_object_finder_node(
     target_frame: str = "map",
     base_frame: str = "base_link",
     publish_debug: bool = True,
+    show_debug_window: bool = True,
 ) -> str:
     """
     Start the RGB-D object detection, approach, and grasp node.
@@ -38,6 +39,7 @@ def start_object_finder_node(
         target_frame: Frame for published object pose.
         base_frame: Robot base frame.
         publish_debug: Publish debug images on /object_debug.
+        show_debug_window: Show live OpenCV debug window on robot display.
     """
     if not prompt.strip():
         return "Invalid 'prompt': provide a non-empty object query."
@@ -53,6 +55,7 @@ def start_object_finder_node(
         "target_frame": target_frame.strip(),
         "base_frame": base_frame.strip(),
         "publish_debug": bool(publish_debug),
+        "show_debug_window": bool(show_debug_window),
     }
     return runner.spawn_node("object_finder", params)
 
@@ -84,6 +87,7 @@ def start_blue_cube_grasper_node(
     depth_max: float = 2.50,
     min_area_px: int = 900,
     base_frame: str = "base_link",
+    show_debug_window: bool = True,
 ) -> str:
     """
     Start the blue-cube specific RGB-D detection and front-grasp node.
@@ -96,6 +100,7 @@ def start_blue_cube_grasper_node(
         depth_max: Maximum accepted depth (m).
         min_area_px: Minimum blob area for blue detection.
         base_frame: TF base frame.
+        show_debug_window: Show live OpenCV debug window on robot display.
     """
     e1 = runner.validate_int("stable_hits", stable_hits, 1, 100)
     e2 = runner.validate_float("depth_min", depth_min, 0.05, 5.0)
@@ -112,5 +117,6 @@ def start_blue_cube_grasper_node(
         "depth_max": float(depth_max),
         "min_area_px": int(min_area_px),
         "base_frame": base_frame.strip(),
+        "show_debug_window": bool(show_debug_window),
     }
     return runner.spawn_node("blue_cube_grasper", params)
