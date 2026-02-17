@@ -11,6 +11,7 @@ import sys
 import traceback
 from typing import Optional
 from dotenv import load_dotenv
+from tools import *
 
 load_dotenv()  # Load environment variables from .env file if present
 
@@ -56,15 +57,50 @@ if not OPENAI_API_KEY:
 llm = ChatOpenAI(model=os.environ.get("ROSA_MODEL", "gpt-4o"), temperature=0, api_key=OPENAI_API_KEY)
 
 # Instantiate ROSA and tell it to load tools from the local `tools` package
-agent = ROSA(ros_version=1, llm=llm, tool_packages=["tools"], streaming=False, verbose=True)
-
+agent = ROSA(
+    ros_version=1,
+    llm=llm,
+    tools=[
+        turn_in_place,
+        get_autonomy_status,
+        reset_cam_coverage,
+        start_blue_cube_grasper_node,
+        start_cam_coverage_node,
+        start_frontier_planner_node,
+        start_object_finder_node,
+        start_straight_planner_node,
+        stop_autonomy_nodes,
+        update_object_query,
+    ],          # <-- force include your tool
+    tool_packages=["tools"],        # optional; keep if you want package discovery too
+    blacklist=["rosservice_list"],  # <-- disable the buggy tool
+    streaming=False,
+    verbose=True,
+)
 import inspect
 print("ROSA init signature:", inspect.signature(ROSA.__init__))
 
 # What tools did ROSA load internally?
 print("ROSA __tools type:", type(agent._ROSA__tools))
 print("ROSA __tools:", agent._ROSA__tools)
-print("ROSA _get_tools():", agent._get_tools())
+print("ROSA _get_tools():", agent._get_tools(
+    ros_version=1, 
+    packages=["tools"], 
+    tools=[
+        turn_in_place,
+        get_autonomy_status,
+        reset_cam_coverage,
+        start_blue_cube_grasper_node,
+        start_cam_coverage_node,
+        start_frontier_planner_node,
+        start_object_finder_node,
+        start_straight_planner_node,
+        stop_autonomy_nodes,
+        update_object_query,
+    ],
+    blacklist=[]
+))
+
 
 def repl():
     print("ROSA agent ready. Type a question (or 'exit' to quit).")
