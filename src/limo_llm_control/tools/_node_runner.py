@@ -35,6 +35,13 @@ NODE_SCRIPTS: Dict[str, str] = {
     "object_finder": "object_finder.py",
     "blue_cube_grasper": "pick_cube_blue.py",
 }
+CORE_NODE_KEYS = {"cam_coverage", "frontier_planner", "straight_planner"}
+
+LAUNCH_FILES: Dict[str, str] = {
+    "autonomy_core": "autonomy_core.launch",
+    "autonomy_perception": "autonomy_perception.launch",
+    "autonomy_blue_grasp": "autonomy_blue_grasp.launch",
+}
 
 _PROCESSES: Dict[str, subprocess.Popen] = {}
 _PROCESS_META: Dict[str, dict] = {}
@@ -76,15 +83,106 @@ def _remote_cfg() -> Dict[str, Any]:
     }
 
 
-def _local_spawn_node(node_key: str, params: Dict[str, object]) -> str:
-    """Spawn node locally on the machine where tools run."""
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
+def _resolve_local_process_key(node_key: str) -> str:
+    """Map tool-facing node key to local managed launch process key."""
+    if node_key in CORE_NODE_KEYS:
+        return "autonomy_core"
+    if node_key == "object_finder":
+        return "autonomy_perception"
+    if node_key == "blue_cube_grasper":
+        return "autonomy_blue_grasp"
+    return node_key
+
+
+def _local_launch_spec(node_key: str, params: Dict[str, object]) -> tuple[str, list]:
+    """Build roslaunch command for a tool node key + params."""
+    process_key = _resolve_local_process_key(node_key)
+
+    if process_key == "autonomy_core":
+        launch_file = LAUNCH_FILES["autonomy_core"]
+        args = []
+        if "range_m" in params:
+            args.append(f"coverage_range_m:={params['range_m']}")
+        if "camera_info_topic" in params:
+            args.append(f"camera_info_topic:={params['camera_info_topic']}")
+        if "frame_camera" in params:
+            args.append(f"camera_frame:={params['frame_camera']}")
+        if "map_topic" in params:
+            args.append(f"map_topic:={params['map_topic']}")
+        if "coverage_topic" in params:
+            args.append(f"coverage_topic:={params['coverage_topic']}")
+        if "goal_topic" in params:
+            args.append(f"goal_topic:={params['goal_topic']}")
+        if "global_costmap_topic" in params:
+            args.append(f"global_costmap_topic:={params['global_costmap_topic']}")
+
+        # Planner selection for hybrid core launch.
+        if node_key == "frontier_planner":
+            args += ["use_frontier_planner:=true", "use_straight_planner:=false"]
+            if "min_frontier_dist_m" in params:
+                args.append(f"min_frontier_dist_m:={params['min_frontier_dist_m']}")
+            if "safety_radius_m" in params:
+                args.append(f"safety_radius_m:={params['safety_radius_m']}")
+            if "strategy" in params:
+                args.append(f"strategy:={params['strategy']}")
+        elif node_key == "straight_planner":
+            args += ["use_frontier_planner:=false", "use_straight_planner:=true"]
+            if "replan_period" in params:
+                args.append(f"replan_period:={params['replan_period']}")
+            if "segment_max_len" in params:
+                args.append(f"segment_max_len:={params['segment_max_len']}")
+            if "min_forward_free" in params:
+                args.append(f"min_forward_free:={params['min_forward_free']}")
+            if "heading_samples" in params:
+                args.append(f"heading_samples:={params['heading_samples']}")
+        else:
+            args += ["use_frontier_planner:=false", "use_straight_planner:=false"]
+
+        return process_key, ["roslaunch", "limo_rosa_bridge", launch_file] + args
+
+    if process_key == "autonomy_perception":
+        launch_file = LAUNCH_FILES["autonomy_perception"]
+        args = []
+        for key in (
+            "prompt",
+            "threshold",
+            "min_hits",
+            "target_frame",
+            "base_frame",
+            "publish_debug",
+            "show_debug_window",
+        ):
+            if key in params:
+                args.append(f"{key}:={params[key]}")
+        return process_key, ["roslaunch", "limo_rosa_bridge", launch_file] + args
+
+    if process_key == "autonomy_blue_grasp":
+        launch_file = LAUNCH_FILES["autonomy_blue_grasp"]
+        args = []
+        for key in (
+            "stable_hits",
+            "depth_min",
+            "depth_max",
+            "min_area_px",
+            "base_frame",
+            "show_debug_window",
+        ):
+            if key in params:
+                args.append(f"{key}:={params[key]}")
+        return process_key, ["roslaunch", "limo_rosa_bridge", launch_file] + args
+
+    # Fallback to script-based local spawn for unknown keys.
     script = _SRC_DIR / NODE_SCRIPTS[node_key]
-    if not script.exists():
-        return f"Cannot start '{node_key}': script not found at {script}."
+    return process_key, [sys.executable, str(script)] + _build_ros_private_param_args(params)
+
+
+def _local_spawn_node(node_key: str, params: Dict[str, object]) -> str:
+    """Spawn node locally via roslaunch-managed package launches."""
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    process_key, cmd = _local_launch_spec(node_key, params)
 
     with _LOCK:
-        old_proc = _PROCESSES.get(node_key)
+        old_proc = _PROCESSES.get(process_key)
         if old_proc is not None and old_proc.poll() is None:
             try:
                 old_proc.terminate()
@@ -92,9 +190,9 @@ def _local_spawn_node(node_key: str, params: Dict[str, object]) -> str:
             except Exception:
                 old_proc.kill()
             finally:
-                _PROCESSES.pop(node_key, None)
-                _PROCESS_META.pop(node_key, None)
-                old_log = _PROCESS_LOG_HANDLES.pop(node_key, None)
+                _PROCESSES.pop(process_key, None)
+                _PROCESS_META.pop(process_key, None)
+                old_log = _PROCESS_LOG_HANDLES.pop(process_key, None)
                 if old_log is not None:
                     try:
                         old_log.close()
@@ -104,8 +202,6 @@ def _local_spawn_node(node_key: str, params: Dict[str, object]) -> str:
         stamp = time.strftime("%Y%m%d_%H%M%S")
         log_path = LOG_DIR / f"{node_key}_{stamp}.log"
         log_handle = open(log_path, "a", encoding="utf-8")
-
-        cmd = [sys.executable, str(script)] + _build_ros_private_param_args(params)
         proc = subprocess.Popen(
             cmd,
             cwd=str(_SRC_DIR),
@@ -113,16 +209,17 @@ def _local_spawn_node(node_key: str, params: Dict[str, object]) -> str:
             stderr=subprocess.STDOUT,
         )
 
-        _PROCESSES[node_key] = proc
-        _PROCESS_LOG_HANDLES[node_key] = log_handle
-        _PROCESS_META[node_key] = {
+        _PROCESSES[process_key] = proc
+        _PROCESS_LOG_HANDLES[process_key] = log_handle
+        _PROCESS_META[process_key] = {
             "pid": proc.pid,
             "started_unix_s": time.time(),
-            "script": str(script),
+            "node_key": node_key,
             "params": params,
             "log_file": str(log_path),
             "cmd": cmd,
             "exec_mode": "local",
+            "process_key": process_key,
         }
 
     time.sleep(0.2)
@@ -132,7 +229,7 @@ def _local_spawn_node(node_key: str, params: Dict[str, object]) -> str:
             f"Check log: {log_path}."
         )
 
-    return f"Started '{node_key}' locally (pid={proc.pid}). Log: {log_path}."
+    return f"Started '{node_key}' locally via '{process_key}' (pid={proc.pid}). Log: {log_path}."
 
 
 def _ssh_target(cfg: Dict[str, Any]) -> str:
@@ -302,13 +399,14 @@ def spawn_node(node_key: str, params: Dict[str, object]) -> str:
 
 def stop_node(node_key: str) -> str:
     """Stop one node process if active."""
+    local_process_key = _resolve_local_process_key(node_key)
     with _LOCK:
-        meta = _PROCESS_META.get(node_key, {})
+        meta = _PROCESS_META.get(local_process_key, {})
     if meta.get("exec_mode") == "ssh":
-        return _remote_stop_node(node_key)
+        return _remote_stop_node(local_process_key)
 
     with _LOCK:
-        proc = _PROCESSES.get(node_key)
+        proc = _PROCESSES.get(local_process_key)
         if proc is None:
             return f"Node '{node_key}' is not running."
 
@@ -322,9 +420,9 @@ def stop_node(node_key: str) -> str:
             except Exception:
                 pass
 
-        _PROCESSES.pop(node_key, None)
-        meta = _PROCESS_META.pop(node_key, None)
-        log_handle = _PROCESS_LOG_HANDLES.pop(node_key, None)
+        _PROCESSES.pop(local_process_key, None)
+        meta = _PROCESS_META.pop(local_process_key, None)
+        log_handle = _PROCESS_LOG_HANDLES.pop(local_process_key, None)
         if log_handle is not None:
             try:
                 log_handle.close()
@@ -339,6 +437,8 @@ def stop_all_nodes() -> str:
     """Stop all managed autonomy node subprocesses."""
     with _LOCK:
         keys = list(_PROCESSES.keys())
+        remote_only = [k for k, v in _PROCESS_META.items() if v.get("exec_mode") == "ssh" and k not in _PROCESSES]
+        keys.extend(remote_only)
     if not keys:
         return "No managed autonomy nodes are currently running."
     results = [stop_node(k) for k in keys]
