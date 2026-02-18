@@ -76,9 +76,12 @@ if not OPENAI_API_KEY:
 
 llm = ChatOpenAI(model=os.environ.get("ROSA_MODEL", "gpt-4o"), temperature=0, api_key=OPENAI_API_KEY)
 
-agent = ROSA(
-    ros_version=1,
-    llm=llm,
+# What tools did ROSA load internally?
+print("ROSA __tools type:", type(agent._ROSA__tools))
+print("ROSA __tools:", agent._ROSA__tools)
+tools_obj = agent._get_tools(
+    ros_version=1, 
+    packages=["tools"], 
     tools=[
         turn_in_place,
         get_autonomy_status,
@@ -91,14 +94,18 @@ agent = ROSA(
         stop_autonomy_nodes,
         update_object_query,
     ],
-    tool_packages=["tools"],
-    blacklist=["rosservice_list"],
-    streaming=False,
-    verbose=True,
+    blacklist=[]
 )
-
-agent._get_tools()
-logger.info("ROSA agent and tools ready.")
+print("ROSA _get_tools():", tools_obj)
+for attr in ("tools", "_tools", "langchain_tools"):
+    if hasattr(tools_obj, attr):
+        vals = getattr(tools_obj, attr)
+        try:
+            print(f"{attr} count:", len(vals))
+            for t in vals:
+                print(" -", getattr(t, "name", repr(t)))
+        except Exception:
+            print(f"{attr}:", vals)
 
 
 def repl():
