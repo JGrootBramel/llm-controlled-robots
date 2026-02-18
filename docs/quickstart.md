@@ -28,13 +28,13 @@ wsl -u root
 
 From Ubuntu CMD change clone this repository:
  ```bash
- git clone https://github.com/JGrootBramel/llm-pick-me-bots.git
+ git clone https://github.com/JGrootBramel/llm-controlled-robots.git
  ```
 
 Change directory and bulid the docker container:
  ```bash
- cd ~/llm-pick-me-bots
- docker build -t noetic-gazebo-rosa -f ./Dockerfile.noetic .
+ cd ~/llm-controlled-robots
+ docker build -t noetic-gazebo-rosa -f ./sim/docker/Dockerfile .
  ```
 Create a dot `.env` file containing your OPENAI_API_KEY. There is a `.example.env`file in the repository  for your referencce.
 ```bash

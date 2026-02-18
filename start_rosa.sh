@@ -82,8 +82,8 @@ fi
 # Find ROSA controller script
 SCRIPT_PATH=""
 # Prefer the mounted workspace copy so we always run the latest code.
-if [ -f "/workspace/llm-pick-me-bots/docs/rosa_robot_controller.py" ]; then
-    SCRIPT_PATH="/workspace/llm-pick-me-bots/docs/rosa_robot_controller.py"
+if [ -f "/workspace/llm-controlled-robots/docs/rosa_robot_controller.py" ]; then
+    SCRIPT_PATH="/workspace/llm-controlled-robots/docs/rosa_robot_controller.py"
 elif [ -f "/root/catkin_ws/src/limo_cobot_sim/docs/rosa_robot_controller.py" ]; then
     SCRIPT_PATH="/root/catkin_ws/src/limo_cobot_sim/docs/rosa_robot_controller.py"
 elif [ -f "./docs/rosa_robot_controller.py" ]; then

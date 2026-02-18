@@ -24,7 +24,7 @@
    - Enter the container: `sudo docker exec -it <CONTAINER_ID> /bin/bash`
    - Run:
      ```bash
-     bash /workspace/llm-pick-me-bots/start_rosa.sh
+     bash /workspace/llm-controlled-robots/start_rosa.sh
      ```
 
 **Windows note**: Use WSL2 (recommended). See the Windows section in `docs/ROSA_INTEGRATION.md`.

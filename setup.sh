@@ -1,10 +1,10 @@
 #!/bin/bash
-# Setup script for llm-pick-me-bots simulation environment
+# Setup script for llm-controlled-robots simulation environment
 
 set -e
 
 echo "========================================="
-echo "LLM Pick Me Bots - Setup Script"
+echo "LLM Controlled Robots - Setup Script"
 echo "========================================="
 
 # Detect if running on WSL
@@ -147,7 +147,7 @@ echo "Docker is installed and accessible ✓"
 echo ""
 echo "Building ROS Noetic (ROS1) simulation environment..."
 echo "Note: This project uses ROS 1 Noetic with Gazebo Classic for simulation."
-DOCKERFILE="Dockerfile.noetic"
+DOCKERFILE="sim/docker/Dockerfile"
 IMAGE_NAME="noetic-gazebo-rosa"
 ROS_DISTRO="noetic"
 

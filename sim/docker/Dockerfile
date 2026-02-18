@@ -47,7 +47,7 @@ RUN python3.9 -m venv "${ROSA_VENV}" \
  && source "${ROSA_VENV}/bin/activate" \
  && pip install --upgrade pip \
  && pip install -U jpl-rosa \
- && pip install langchain-openai langchain-google-genai langchain-core python-dotenv
+ && pip install langchain-openai langchain-google-genai langchain-core python-dotenv pytest pytest-timeout
 
 # --------------------------------------------------------------------------
 # Initialize rosdep
@@ -55,15 +55,21 @@ RUN python3.9 -m venv "${ROSA_VENV}" \
 RUN rosdep update || (rosdep init && rosdep update)
 
 # --------------------------------------------------------------------------
-# Create catkin workspace and clone LIMO COBOT sim repo
+# Create catkin workspace and clone LIMO COBOT sim repo (Gazebo packages)
 # --------------------------------------------------------------------------
 ENV CATKIN_WS=/root/catkin_ws
+ENV REPO_DIR=/workspace/llm-controlled-robots
 WORKDIR ${CATKIN_WS}
 
 RUN mkdir -p src
 WORKDIR ${CATKIN_WS}/src
 
 RUN git clone https://github.com/agilexrobotics/limo_cobot_sim.git
+
+# --------------------------------------------------------------------------
+# Overlay robot-side ROS package from local repository catkin_ws
+# --------------------------------------------------------------------------
+COPY catkin_ws/src/limo_rosa_bridge ${CATKIN_WS}/src/limo_rosa_bridge
 
 # --------------------------------------------------------------------------
 # Install dependencies via rosdep
@@ -80,16 +86,28 @@ RUN source /opt/ros/noetic/setup.bash \
  && catkin_make
 
 # --------------------------------------------------------------------------
+# Copy project code for in-container ROSA tooling and tests
+# --------------------------------------------------------------------------
+WORKDIR /workspace
+COPY src ${REPO_DIR}/src
+COPY requirements-remote.txt ${REPO_DIR}/requirements-remote.txt
+COPY requirements-robot.txt ${REPO_DIR}/requirements-robot.txt
+
+RUN source "${ROSA_VENV}/bin/activate" \
+ && pip install -r "${REPO_DIR}/requirements-remote.txt"
+
+# --------------------------------------------------------------------------
 # Convenience: source ROS, workspace, and ROSA in interactive shells
 # --------------------------------------------------------------------------
 RUN echo "source /opt/ros/noetic/setup.bash" >> /root/.bashrc \
  && echo "source /root/catkin_ws/devel/setup.bash" >> /root/.bashrc \
- && echo "source ${ROSA_VENV}/bin/activate" >> /root/.bashrc
+ && echo "source ${ROSA_VENV}/bin/activate" >> /root/.bashrc \
+ && echo "export PYTHONPATH=${REPO_DIR}/src:${REPO_DIR}/src/tools:\${PYTHONPATH}" >> /root/.bashrc
 
 # --------------------------------------------------------------------------
 # Set PYTHONPATH for ROSA tools
 # --------------------------------------------------------------------------
- ENV PYTHONPATH=/src/tools:${PYTHONPATH}
+ENV PYTHONPATH=${REPO_DIR}/src:${REPO_DIR}/src/tools:${PYTHONPATH}
 
 # --------------------------------------------------------------------------
 # Force software rendering for OpenGL in container (Gazebo & RViz)

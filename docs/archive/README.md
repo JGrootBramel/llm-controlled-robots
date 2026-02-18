@@ -41,7 +41,7 @@ ROS-based simulation environment for LIMO Cobot robots with LLM integration capa
 
 ```
 llm-controlled-robots/
-├── Dockerfile.noetic      # ROS Noetic + Gazebo Classic + ROSA
+├── sim/docker/Dockerfile      # ROS Noetic + Gazebo Classic + ROSA
 ├── setup.sh               # Automated setup script
 ├── setup_env.sh           # Setup API keys for ROSA
 ├── run_simulation.sh      # Run simulation script

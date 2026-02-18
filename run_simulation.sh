@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run script for llm-pick-me-bots simulation
+# Run script for llm-controlled-robots simulation
 
 set -e
 
@@ -30,7 +30,7 @@ else
 fi
 
 echo "========================================="
-echo "Starting LLM Pick Me Bots Simulation"
+echo "Starting LLM Controlled Robots Simulation"
 echo "========================================="
 echo "Using image: $IMAGE_NAME"
 echo "ROS distribution: $ROS_DISTRO"
@@ -53,7 +53,7 @@ echo "Starting Docker container..."
 echo ""
 
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
-echo "Mounting project into container at /workspace/llm-pick-me-bots"
+echo "Mounting project into container at /workspace/llm-controlled-robots"
 echo "Project root: $PROJECT_ROOT"
 echo ""
 
@@ -64,7 +64,7 @@ if [ "$ROS_DISTRO" = "noetic" ]; then
         -e DISPLAY=$DISPLAY \
         -e QT_X11_NO_MITSHM=1 \
         -v /tmp/.X11-unix:/tmp/.X11-unix \
-        -v "$PROJECT_ROOT:/workspace/llm-pick-me-bots" \
+        -v "$PROJECT_ROOT:/workspace/llm-controlled-robots" \
         $IMAGE_NAME
 else
     # ROS 2 (Humble/Foxy) - starts interactive shell
@@ -73,7 +73,7 @@ else
         -e DISPLAY=$DISPLAY \
         -e QT_X11_NO_MITSHM=1 \
         -v /tmp/.X11-unix:/tmp/.X11-unix \
-        -v "$PROJECT_ROOT:/workspace/llm-pick-me-bots" \
+        -v "$PROJECT_ROOT:/workspace/llm-controlled-robots" \
         $IMAGE_NAME
 fi
 

@@ -1,7 +1,7 @@
 ## December 2025 integration notes (what changed and why)
 
 ### 1) Repo mount into Docker
-- **Change**: `run_simulation.sh` now mounts the repo into the container at `/workspace/llm-pick-me-bots`.
+- **Change**: `run_simulation.sh` now mounts the repo into the container at `/workspace/llm-controlled-robots`.
 - **Why**: Running controllers from host paths (e.g., `/home/student/...`) fails inside Docker. Mounting makes scripts available and editable from the host while running in-container.
 
 ### 2) `start_rosa.sh` made robust
@@ -10,7 +10,7 @@
   - Sources ROS Noetic + the workspace
   - Auto-installs missing Python deps into the venv (`rospkg`, `catkin_pkg`, `importlib-metadata`, and provider SDKs)
   - Prompts for missing API keys without echo
-  - Prefers running the controller from `/workspace/llm-pick-me-bots/docs/rosa_robot_controller.py`
+  - Prefers running the controller from `/workspace/llm-controlled-robots/docs/rosa_robot_controller.py`
 - **Why**: The ROSA venv was missing ROS python deps and provider SDKs, causing runtime import failures.
 
 ### 3) OpenAI support (standard key) added/confirmed

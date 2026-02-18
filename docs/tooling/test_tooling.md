@@ -7,7 +7,7 @@ This guide explains how to test the ROSA tooling workflow end-to-end for the LIM
 - ROS master is running and reachable (`ROS_MASTER_URI` set correctly).
 - Python environment has required packages installed (for example `rospy`, `tf2_ros`, `langchain_openai`, and robot-specific dependencies).
 - `OPENAI_API_KEY` is set.
-- You are in the project root: `llm-pick-me-bots`.
+- You are in the project root: `llm-controlled-robots`.
 
 ## 1) Start ROSA and verify tool discovery
 

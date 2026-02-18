@@ -48,14 +48,14 @@ This project runs ROS1 + Gazebo/RViz inside Linux Docker containers. On Windows,
 
 ### Quick verification checklist
 1. When running `./run_simulation.sh`, you should see:
-   - `Mounting project into container at /workspace/llm-pick-me-bots`
+   - `Mounting project into container at /workspace/llm-controlled-robots`
 2. Inside the container:
    ```bash
-   ls /workspace/llm-pick-me-bots/start_rosa.sh
+   ls /workspace/llm-controlled-robots/start_rosa.sh
    ```
 3. If that path exists, you can run:
    ```bash
-   bash /workspace/llm-pick-me-bots/start_rosa.sh
+   bash /workspace/llm-controlled-robots/start_rosa.sh
    ```
 
 ## Quick Start
@@ -83,7 +83,7 @@ sudo docker exec -it <CONTAINER_ID> /bin/bash
 **Note:** `run_simulation.sh` mounts this repo into the container at:
 
 ```bash
-/workspace/llm-pick-me-bots
+/workspace/llm-controlled-robots
 ```
 
 ### Step 3: Activate ROSA Environment
@@ -128,7 +128,7 @@ export GOOGLE_API_KEY='your-api-key-here'
 
 **Use the quick start script (recommended):**
 ```bash
-bash /workspace/llm-pick-me-bots/start_rosa.sh
+bash /workspace/llm-controlled-robots/start_rosa.sh
 ```
 
 This script automatically:
@@ -148,7 +148,7 @@ export ROSA_LLM_PROVIDER="openai"
 export OPENAI_API_KEY="..."
 # optional:
 export OPENAI_MODEL="gpt-4o-mini"
-bash /workspace/llm-pick-me-bots/start_rosa.sh
+bash /workspace/llm-controlled-robots/start_rosa.sh
 ```
 
 **Gemini**
@@ -165,7 +165,7 @@ Gemini has strict tool schema validation. Choose a tool mode:
 
 ```bash
 export ROSA_GEMINI_TOOL_MODE="safe"   # or "all"
-bash /workspace/llm-pick-me-bots/start_rosa.sh
+bash /workspace/llm-controlled-robots/start_rosa.sh
 ```
 
 ## Usage Examples
@@ -290,7 +290,7 @@ If you see errors like `GenerateContentRequest.tools... missing field`, switch G
 
 ```bash
 export ROSA_GEMINI_TOOL_MODE="safe"
-bash /workspace/llm-pick-me-bots/start_rosa.sh
+bash /workspace/llm-controlled-robots/start_rosa.sh
 ```
 
 ## Advanced Usage
