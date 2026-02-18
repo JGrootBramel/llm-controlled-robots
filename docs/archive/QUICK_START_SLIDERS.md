@@ -10,7 +10,7 @@ Step-by-step guide to control the robot using GUI sliders and standard ROS tools
 
 **Check if you need to rebuild**:
 ```bash
-cd ~/llm_robot/llm-pick-me-bots
+cd ~/llm_robot/llm-controlled-robots
 docker images | grep noetic-gazebo-rosa
 ```
 
@@ -31,7 +31,7 @@ docker images | grep noetic-gazebo-rosa
 
 **Run this**:
 ```bash
-cd ~/llm_robot/llm-pick-me-bots
+cd ~/llm_robot/llm-controlled-robots
 ./run_simulation.sh
 ```
 

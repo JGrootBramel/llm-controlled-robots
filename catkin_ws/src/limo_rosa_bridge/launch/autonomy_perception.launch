@@ -1,0 +1,22 @@
+<launch>
+  <!-- On-demand heavy perception stack -->
+  <arg name="prompt" default="a water bottle" />
+  <arg name="threshold" default="0.15" />
+  <arg name="min_hits" default="3" />
+  <arg name="target_frame" default="map" />
+  <arg name="base_frame" default="base_link" />
+  <arg name="publish_debug" default="true" />
+  <arg name="show_debug_window" default="true" />
+  <arg name="debug_window_name" default="object_finder_debug" />
+
+  <node pkg="limo_rosa_bridge" type="object_finder_node.py" name="object_finder" output="screen">
+    <param name="prompt" value="$(arg prompt)" />
+    <param name="threshold" value="$(arg threshold)" />
+    <param name="min_hits" value="$(arg min_hits)" />
+    <param name="target_frame" value="$(arg target_frame)" />
+    <param name="base_frame" value="$(arg base_frame)" />
+    <param name="publish_debug" value="$(arg publish_debug)" />
+    <param name="show_debug_window" value="$(arg show_debug_window)" />
+    <param name="debug_window_name" value="$(arg debug_window_name)" />
+  </node>
+</launch>

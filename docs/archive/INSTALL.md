@@ -79,7 +79,7 @@ docker run hello-world
 
 Build the ROS Noetic Docker image:
 ```bash
-docker build -t noetic-gazebo-rosa -f ./Dockerfile.noetic .
+docker build -t noetic-gazebo-rosa -f ./sim/docker/Dockerfile .
 ```
 
 **Note**: The build process may take 15-30 minutes depending on your internet connection, as it downloads and compiles many packages.

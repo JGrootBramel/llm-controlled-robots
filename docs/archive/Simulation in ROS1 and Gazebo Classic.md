@@ -2,7 +2,7 @@
 
 For testing we try to generate a dockerfile with the necessery Ubuntu version and necessary software installed.
 
-You can find the Dockerfile in here: [Dockerfile.noetic](../Dockerfile.noetic)
+You can find the Dockerfile in here: [sim/docker/Dockerfile](../sim/docker/Dockerfile)
 
 ## Prerequisits
 
@@ -13,7 +13,7 @@ Docker installed from [Docker.com]
 On linux from the root of this project execute:
 
 ```bash
-docker build -t noetic-gazebo-rosa -f ./Dockerfile.noetic .
+docker build -t noetic-gazebo-rosa -f ./sim/docker/Dockerfile .
 
 ```
 

@@ -1,0 +1,22 @@
+# Robot venv (perception/grasp/runtime helpers).
+# ROS Python modules (rospy, tf2_ros, cv_bridge, message_filters, etc.) are not pip-installed here;
+# they come from the robot's ROS installation.
+
+numpy
+opencv-python
+Pillow
+PyYAML
+rospkg
+
+# rosbridge runtime deps (when rosbridge_websocket is used in venv context)
+Twisted
+pyOpenSSL
+service_identity
+autobahn
+
+# Manipulator + model/runtime packages used by project nodes
+pymycobot
+torch
+
+# Might be used by some nodes for data storage or other purposes; not strictly required for all nodes, but included here for convenience.
+# pymongo

@@ -1,0 +1,9 @@
+# Remote PC venv (LLM + orchestration).
+# ROS packages are intentionally excluded (installed via system ROS where needed).
+
+langchain
+langchain-openai
+openai
+python-dotenv
+requests
+PyYAML
