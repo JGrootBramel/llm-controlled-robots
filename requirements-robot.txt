@@ -17,3 +17,6 @@ autobahn
 # Manipulator + model/runtime packages used by project nodes
 pymycobot
 torch
+
+# Might be used by some nodes for data storage or other purposes; not strictly required for all nodes, but included here for convenience.
+# pymongo
