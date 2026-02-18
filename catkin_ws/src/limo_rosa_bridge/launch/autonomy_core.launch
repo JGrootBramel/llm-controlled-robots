@@ -14,6 +14,10 @@
   <arg name="segment_max_len" default="3.0" />
   <arg name="min_forward_free" default="0.4" />
   <arg name="heading_samples" default="16" />
+  <arg name="start_camera_preview" default="true" />
+  <arg name="camera_preview_topic" default="/camera/color/image_raw" />
+  <arg name="camera_preview_window_name" default="limo_camera_preview" />
+  <arg name="camera_preview_display" default=":0" />
 
   <!-- Planner choice: enable one by default -->
   <arg name="use_frontier_planner" default="true" />
@@ -26,6 +30,15 @@
     <param name="map_topic" value="$(arg map_topic)" />
     <param name="coverage_topic" value="$(arg coverage_topic)" />
   </node>
+
+  <group if="$(arg start_camera_preview)">
+    <node pkg="image_view" type="image_view" name="camera_preview" output="screen">
+      <param name="autosize" value="true" />
+      <param name="window_name" value="$(arg camera_preview_window_name)" />
+      <remap from="image" to="$(arg camera_preview_topic)" />
+      <env name="DISPLAY" value="$(arg camera_preview_display)" />
+    </node>
+  </group>
 
   <group if="$(arg use_frontier_planner)">
     <node pkg="limo_rosa_bridge" type="frontier_planner_node.py" name="frontier_goal_selector" output="screen">

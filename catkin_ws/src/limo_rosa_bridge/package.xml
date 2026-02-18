@@ -91,6 +91,7 @@
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>actionlib</exec_depend>
   <exec_depend>actionlib_msgs</exec_depend>
+  <exec_depend>image_view</exec_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

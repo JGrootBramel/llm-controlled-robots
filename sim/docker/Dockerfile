@@ -25,6 +25,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-noetic-rqt-robot-steering \
     ros-noetic-teleop-twist-keyboard \
     ros-noetic-joint-state-publisher-gui \
+    ros-noetic-image-view \
+    ros-noetic-move-base-msgs \
+    ros-noetic-rosbridge-server \
     mesa-utils \
  && rm -rf /var/lib/apt/lists/*
 

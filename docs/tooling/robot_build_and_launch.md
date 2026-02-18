@@ -45,6 +45,9 @@ This command prepares the environment and then launches:
 roslaunch limo_rosa_bridge rosa_bridge.launch
 ```
 
+By default, this launch starts a camera preview window on the robot display via
+`autonomy_core.launch` (`image_view`, topic `/camera/color/image_raw`, window `limo_camera_preview`).
+
 ## Options
 
 - `--skip-install`  
@@ -91,7 +94,20 @@ Pass launch args:
 ./robot_build_and_launch.sh -- --screen
 ```
 
+Disable camera preview window when launching:
+
+```bash
+./robot_build_and_launch.sh -- start_camera_preview:=false
+```
+
+Override preview display/topic:
+
+```bash
+./robot_build_and_launch.sh -- camera_preview_display:=:0 camera_preview_topic:=/camera/color/image_raw
+```
+
 ## Notes
 
 - The script is safe to rerun after code updates.
 - If launch-managed mode is used for ROSA, perception nodes are expected to be launched on robot side, and this script helps ensure the base robot stack is up and rebuilt.
+- If preview does not appear, verify `image_view` is installed on the robot (`ros-noetic-image-view`) and that `DISPLAY`/X11 access is correct.

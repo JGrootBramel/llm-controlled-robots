@@ -42,6 +42,14 @@ What this should start:
 - `autonomy_core.launch`:
   - `cam_coverage_node.py`
   - one planner (frontier by default)
+  - `image_view` camera preview window (`limo_camera_preview`) on robot display
+
+Camera preview launch args (optional overrides):
+
+- `start_camera_preview` (default: `true`)
+- `camera_preview_topic` (default: `/camera/color/image_raw`)
+- `camera_preview_window_name` (default: `limo_camera_preview`)
+- `camera_preview_display` (default: `:0`)
 
 ## 3) Start ROSA from remote PC
 
@@ -79,6 +87,8 @@ Expected:
 - `/object_detection_ready` becomes `true` when object finder is running.
 - `/object_found` toggles `true` when detected.
 - `/object_pose` gets populated.
+- On robot display, camera preview window appears:
+  - `limo_camera_preview`
 - On robot display, debug windows appear:
   - `object_finder_debug`
   - `blue_cube_debug`
@@ -95,6 +105,9 @@ rosservice list | grep cam_coverage/reset
 ## 6) Common troubleshooting
 
 - No debug window appears:
+  - Ensure `image_view` is installed (`ros-noetic-image-view`).
+  - Ensure `start_camera_preview` is `true` for `autonomy_core.launch`.
+  - Ensure preview topic publishes images (default `/camera/color/image_raw`).
   - Ensure node param `show_debug_window` is `true`.
   - Ensure robot has active display (`DISPLAY=:0` typically).
   - Confirm OpenCV GUI support is installed on robot image.
@@ -129,6 +142,7 @@ rosnode kill /object_finder /blue_cube_grasper /cam_coverage_node /frontier_goal
 ## 8) Minimal success criteria
 
 - Core launch starts without node crashes.
+- Camera preview is visible on robot display after core launch starts.
 - ROSA can start/stop perception tools on demand.
 - `/object_found` and `/object_pose` are published when targets are in view.
 - Debug window is visible on robot display while detection node runs.
