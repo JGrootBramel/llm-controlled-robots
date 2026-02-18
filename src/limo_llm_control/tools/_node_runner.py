@@ -9,6 +9,7 @@ tracks state. All ROS communication uses rospy (native ROS1).
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shlex
 import subprocess
@@ -19,6 +20,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import rospy
+
+logger = logging.getLogger(__name__)
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Bool
 from std_srvs.srv import Empty
@@ -439,23 +442,35 @@ def _launch_managed_start(node_key: str, params: Dict[str, object]) -> str:
 
 def spawn_node(node_key: str, params: Dict[str, object]) -> str:
     """Spawn one autonomy node process; replace existing if already running."""
+    logger.info("spawn_node(node_key=%s, params=%s)", node_key, params)
     if node_key not in NODE_SCRIPTS:
-        return f"Unknown node key '{node_key}'. Valid keys: {sorted(NODE_SCRIPTS.keys())}."
+        out = f"Unknown node key '{node_key}'. Valid keys: {sorted(NODE_SCRIPTS.keys())}."
+        logger.warning("%s", out)
+        return out
     if is_launch_managed_mode():
-        return _launch_managed_start(node_key, params)
+        out = _launch_managed_start(node_key, params)
+        logger.info("spawn_node (launch_managed) -> %s", out)
+        return out
     cfg = _remote_cfg()
     if cfg["mode"] == "ssh":
-        return _remote_spawn_node(node_key, params)
-    return _local_spawn_node(node_key, params)
+        out = _remote_spawn_node(node_key, params)
+        logger.info("spawn_node (ssh) -> %s", out)
+        return out
+    out = _local_spawn_node(node_key, params)
+    logger.info("spawn_node (local) -> %s", out)
+    return out
 
 
 def stop_node(node_key: str) -> str:
     """Stop one node process if active."""
+    logger.info("stop_node(node_key=%s)", node_key)
     if is_launch_managed_mode():
-        return (
+        out = (
             f"Launch-managed mode: stop for '{node_key}' is a no-op. "
             "Use robot launch/node lifecycle control on the robot host."
         )
+        logger.info("stop_node (launch_managed) -> %s", out)
+        return out
     local_process_key = _resolve_local_process_key(node_key)
     with _LOCK:
         meta = _PROCESS_META.get(local_process_key, {})
@@ -487,34 +502,47 @@ def stop_node(node_key: str) -> str:
                 pass
 
     pid = meta["pid"] if meta else "?"
-    return f"Stopped '{node_key}' (former pid={pid})."
+    out = f"Stopped '{node_key}' (former pid={pid})."
+    logger.info("stop_node -> %s", out)
+    return out
 
 
 def stop_all_nodes() -> str:
     """Stop all managed autonomy node subprocesses."""
+    logger.info("stop_all_nodes()")
     if is_launch_managed_mode():
-        return (
+        out = (
             "Launch-managed mode: stop_all is a no-op. "
             "Use robot launch/node lifecycle control on the robot host."
         )
+        logger.info("stop_all_nodes -> %s", out)
+        return out
     with _LOCK:
         keys = list(_PROCESSES.keys())
         remote_only = [k for k, v in _PROCESS_META.items() if v.get("exec_mode") == "ssh" and k not in _PROCESSES]
         keys.extend(remote_only)
     if not keys:
-        return "No managed autonomy nodes are currently running."
+        out = "No managed autonomy nodes are currently running."
+        logger.info("stop_all_nodes -> %s", out)
+        return out
     results = [stop_node(k) for k in keys]
-    return " | ".join(results)
+    out = " | ".join(results)
+    logger.info("stop_all_nodes -> %s", out)
+    return out
 
 
 def call_reset_cam_coverage() -> str:
     """Call /cam_coverage/reset service (rospy)."""
+    logger.info("call_reset_cam_coverage()")
     try:
         rospy.wait_for_service("/cam_coverage/reset", timeout=2.0)
         reset_srv = rospy.ServiceProxy("/cam_coverage/reset", Empty)
         reset_srv()
-        return "Coverage reset service call succeeded."
+        out = "Coverage reset service call succeeded."
+        logger.info("call_reset_cam_coverage -> %s", out)
+        return out
     except Exception as exc:
+        logger.warning("call_reset_cam_coverage failed: %s", exc)
         return f"Coverage reset failed: {exc}"
 
 
