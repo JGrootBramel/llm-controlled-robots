@@ -17,11 +17,14 @@ from .navigation import (
     start_cam_coverage_node,
     start_frontier_planner_node,
     start_straight_planner_node,
+    start_mapping_exploration
+
 )
 from .perception import (
     start_blue_cube_grasper_node,
     start_object_finder_node,
     update_object_query,
+    show_camera_feed
 )
 
 __all__ = [
@@ -29,11 +32,13 @@ __all__ = [
     "drive_distance",
     "start_cam_coverage_node",
     "reset_cam_coverage",
-    "start_frontier_planner_node",
+    #"start_frontier_planner_node",
     "start_straight_planner_node",
     "start_object_finder_node",
     "update_object_query",
     "start_blue_cube_grasper_node",
     "stop_autonomy_nodes",
     "get_autonomy_status",
+    "start_mapping_exploration",
+    "show_camera_feed"
 ]

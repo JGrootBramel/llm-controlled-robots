@@ -6,6 +6,7 @@ Robot-side runs perception; remote calls services/topics per communication-optio
 """
 
 from __future__ import annotations
+from asyncio import subprocess
 
 import rospy
 from langchain.tools import tool
@@ -125,3 +126,20 @@ def start_blue_cube_grasper_node(
         "show_debug_window": bool(show_debug_window),
     }
     return runner.spawn_node("blue_cube_grasper", params)
+
+
+@tool
+def show_camera_feed() -> str:
+    """
+    Starts a visual camera feed window on the PC using rqt_image_view.
+    """
+    import subprocess  # Nutze das Standard-Subprocess Modul, NICHT asyncio
+    try:
+        # Wir starten rqt_image_view und geben das Topic direkt mit
+        # 'shell=False' ist sicherer und 'Popen' blockiert ROSA nicht.
+        subprocess.Popen(["rqt_image_view", "/camera/color/image_raw"])
+        return "Kamera-Feed was opened in a new Window (rqt_image_view)."
+    except FileNotFoundError:
+        return "Error: 'rqt_image_view' was not found. Please install it with 'sudo apt install ros-noetic-rqt-image-view'."
+    except Exception as e:
+        return f"Unexpected error while starting the feed: {str(e)}"

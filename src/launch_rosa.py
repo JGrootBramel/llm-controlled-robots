@@ -71,6 +71,8 @@ agent = ROSA(
         start_straight_planner_node,
         stop_autonomy_nodes,
         update_object_query,
+        show_camera_feed,           
+        start_mapping_exploration 
     ],          # <-- force include your tool
     tool_packages=["tools"],        # optional; keep if you want package discovery too
     blacklist=["rosservice_list"],  # <-- disable the buggy tool
@@ -97,6 +99,8 @@ tools_obj = agent._get_tools(
         start_straight_planner_node,
         stop_autonomy_nodes,
         update_object_query,
+        show_camera_feed,           
+        start_mapping_exploration
     ],
     blacklist=[]
 )

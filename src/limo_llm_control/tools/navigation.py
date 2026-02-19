@@ -6,11 +6,27 @@ Robot-side runs move_base and perception; remote calls capabilities and services
 """
 
 from __future__ import annotations
+import subprocess
+from time import time
+import os
+import threading
 
 from langchain.tools import tool
 
 from . import _node_runner as runner
 
+# Global variable to keep track of the timer so we can cancel it if needed
+_exploration_timer = None
+
+def _stop_exploration_callback():
+    """Internal function to stop the robot when time is up."""
+    # 1. Cancel the current goal so the robot stops moving immediately
+    os.system("rostopic pub -1 /move_base/cancel actionlib_msgs/GoalID '{}' > /dev/null 2>&1")
+    
+    # 2. Kill the planner node on the robot via the network
+    # This stops the 'got new plan' loop
+    os.system("rosnode kill /frontier_goal_selector > /dev/null 2>&1")
+    print("Autonomy Stop: Timer expired or manual stop triggered.")
 
 @tool
 def start_cam_coverage_node(
@@ -140,3 +156,24 @@ def start_straight_planner_node(
         "heading_samples": int(heading_samples),
     }
     return runner.spawn_node("straight_planner", params)
+
+@tool
+def start_mapping_exploration() -> str:
+    """
+    Starts the exploration planner directly on the robot via SSH SILENTLY.
+    ROSA must use this to start exploration without spamming the terminal.
+    """
+    workspace_setup = "~/llm-controlled-robots/catkin_ws/devel/setup.bash" 
+    
+    # Notice the '> /dev/null 2>&1 &' at the very end.
+    # This completely mutes the node and runs it in the background!
+    ssh_command = [
+        "ssh",
+        "agilex@192.168.0.105",
+        f"bash -c 'source /opt/ros/noetic/setup.bash && source {workspace_setup} && export ROS_MASTER_URI=http://localhost:11311 && rosrun limo_rosa_bridge frontier_planner_node.py _coverage_topic:=/cam_coverage > /dev/null 2>&1 &'"
+    ]
+    
+    # Fire and forget. No logs will come back to the PC terminal.
+    subprocess.Popen(ssh_command)
+    
+    return "Exploration started silently. The robot is moving. Terminal remains clean."

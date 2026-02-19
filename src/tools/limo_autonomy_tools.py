@@ -22,6 +22,9 @@ import threading
 import time
 from pathlib import Path
 from typing import Dict, Literal, Optional
+from limo_llm_control.tools import _node_runner as runner
+import os
+from actionlib_msgs.msg import GoalID
 
 import rospy
 from geometry_msgs.msg import PoseStamped
@@ -47,6 +50,18 @@ _PROCESS_LOG_HANDLES: Dict[str, object] = {}
 _LOCK = threading.Lock()
 _QUERY_PUB = None
 
+# Global variable to keep track of the timer so we can cancel it if needed
+_exploration_timer = None
+
+def _stop_exploration_callback():
+    """Internal function to stop the robot when time is up."""
+    # 1. Cancel the current goal so the robot stops moving immediately
+    os.system("rostopic pub -1 /move_base/cancel actionlib_msgs/GoalID '{}' > /dev/null 2>&1")
+    
+    # 2. Kill the planner node on the robot via the network
+    # This stops the 'got new plan' loop
+    os.system("rosnode kill /frontier_goal_selector > /dev/null 2>&1")
+    print("Autonomy Stop: Timer expired or manual stop triggered.")
 
 def _ensure_rospy() -> None:
     """Initialize a lightweight ROS node context for tool-side helpers."""
@@ -240,6 +255,15 @@ def reset_cam_coverage() -> str:
         return "Coverage reset service call succeeded."
     except Exception as exc:
         return f"Coverage reset failed: {exc}"
+    
+@tool
+def start_exploration_workflow() -> str:
+    """
+    Starts the complete Mapping-System (Coverage + Frontier Planner).
+    """
+    res1 = start_cam_coverage_node()
+    res2 = start_frontier_planner_node()
+    return f"Mapping started: {res1} and {res2}. You can see the progress in RViz on topic /cam_coverage."
 
 
 @tool
@@ -437,25 +461,17 @@ def start_blue_cube_grasper_node(
 
 
 @tool
-def stop_autonomy_nodes(
-    node: Literal[
-        "all",
-        "cam_coverage",
-        "frontier_planner",
-        "straight_planner",
-        "object_finder",
-        "blue_cube_grasper",
-    ] = "all",
-) -> str:
+def stop_autonomy_nodes(node: str = "all") -> str:
     """
-    Stop one managed autonomy node, or stop all managed autonomy nodes.
-
-    Args:
-        node: Which node to stop. Use "all" to stop every managed node.
+    Stops the robot's movement and kills the planner node.
+    Use this to pause exploration for picking up cubes.
     """
-    if node == "all":
-        return _stop_all_nodes()
-    return _stop_node(node)
+    global _exploration_timer
+    if _exploration_timer is not None:
+        _exploration_timer.cancel()
+    
+    _stop_exploration_callback()
+    return "Autonomy stopped. The 'new plan' loop is broken. RViz remains open."
 
 
 @tool
@@ -520,3 +536,42 @@ def get_autonomy_status() -> str:
 
     payload = {"managed_nodes": proc_snapshot, "ros_state": ros_state}
     return json.dumps(payload, ensure_ascii=True)
+
+
+@tool
+def show_camera_feed() -> str:
+    """
+    Starts a visual camera feed window on the PC using rqt_image_view.
+    """
+    import subprocess  # Nutze das Standard-Subprocess Modul, NICHT asyncio
+    try:
+        # Wir starten rqt_image_view und geben das Topic direkt mit
+        # 'shell=False' ist sicherer und 'Popen' blockiert ROSA nicht.
+        subprocess.Popen(["rqt_image_view", "/camera/color/image_raw"])
+        return "Kamera-Feed was opened in a new Window (rqt_image_view)."
+    except FileNotFoundError:
+        return "Error: 'rqt_image_view' was not found. Please install it with 'sudo apt install ros-noetic-rqt-image-view'."
+    except Exception as e:
+        return f"Unexpected error while starting the feed: {str(e)}"
+
+@tool
+def start_mapping_exploration(duration_minutes: float = 5.0) -> str:
+    """
+    Since the planner starts automatically with the bridge, this tool
+    now manages the 'active window' for exploration.
+    """
+    global _exploration_timer
+    
+    # If the node was killed previously, we need to restart it on the robot
+    # We use a network command to 'rosrun' it back into existence
+    os.system("rosrun limo_rosa_bridge frontier_planner_node.py _coverage_topic:=/cam_coverage &")
+    
+    # Start the timer to kill it later
+    if _exploration_timer is not None:
+        _exploration_timer.cancel()
+        
+    seconds = duration_minutes * 60
+    _exploration_timer = threading.Timer(seconds, _stop_exploration_callback)
+    _exploration_timer.start()
+    
+    return f"Exploration is active. I will automatically kill the planner in {duration_minutes} minutes."

@@ -1,15 +1,18 @@
 <launch>
     <include file="$(find limo_bringup)/launch/limo_start.launch" />
 
+    <include file="$(find limo_bringup)/launch/limo_gmapping.launch" />
+
+    <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
+
+    <include file="$(find astra_camera)/launch/astra_pro.launch" />
+
     <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" />
 
-    <!-- Always-on autonomy core: coverage + one planner -->
     <include file="$(find limo_rosa_bridge)/launch/autonomy_core.launch">
-      <arg name="use_frontier_planner" value="true" />
+      <arg name="use_frontier_planner" value="false" />
       <arg name="use_straight_planner" value="false" />
     </include>
 
-    <!-- Start perception stack with bridge launch -->
     <include file="$(find limo_rosa_bridge)/launch/autonomy_perception.launch" />
-
 </launch>
