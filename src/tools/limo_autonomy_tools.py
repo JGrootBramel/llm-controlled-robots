@@ -459,6 +459,37 @@ def stop_autonomy_nodes(
 
 
 @tool
+def set_exploration_enabled(enabled: bool = True) -> str:
+    """
+    Pause or resume the frontier exploration without killing the planner node.
+
+    When disabled (enabled=False):
+    - Cancels the current navigation goal
+    - Stops the robot
+    - Prevents new goals from being selected
+
+    When enabled (enabled=True):
+    - Resumes exploration from the current position
+    - New frontier goals will be selected
+
+    Use this to temporarily stop exploration (e.g., when user says "stop exploring")
+    without having to restart the entire planner node.
+
+    Args:
+        enabled: True to enable/resume exploration, False to pause/stop.
+    """
+    _ensure_rospy()
+    try:
+        pub = rospy.Publisher("/exploration_enabled", Bool, queue_size=1, latch=True)
+        rospy.sleep(0.1)  # Allow time for publisher to register
+        pub.publish(Bool(data=enabled))
+        state = "enabled" if enabled else "disabled"
+        return f"Exploration {state}. Robot will {'resume selecting new goals' if enabled else 'stop and hold position'}."
+    except Exception as exc:
+        return f"Failed to set exploration state: {exc}"
+
+
+@tool
 def get_autonomy_status() -> str:
     """
     Return status for managed autonomy subprocesses and key ROS state topics.
