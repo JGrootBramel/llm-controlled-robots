@@ -15,10 +15,10 @@ from .motion import drive_distance, turn_in_place
 from .navigation import (
     reset_cam_coverage,
     start_cam_coverage_node,
-    start_frontier_planner_node,
     start_straight_planner_node,
-    start_mapping_exploration
-
+    start_mapping_exploration,
+    stop_exploration,
+    set_exploration_enabled,
 )
 from .perception import (
     start_blue_cube_grasper_node,
@@ -40,5 +40,7 @@ __all__ = [
     "stop_autonomy_nodes",
     "get_autonomy_status",
     "start_mapping_exploration",
-    "show_camera_feed"
+    "set_exploration_enabled",
+    "show_camera_feed",
+    "stop_exploration"
 ]

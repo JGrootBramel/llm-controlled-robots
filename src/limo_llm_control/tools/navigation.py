@@ -9,24 +9,15 @@ from __future__ import annotations
 import subprocess
 from time import time
 import os
-import threading
 
 from langchain.tools import tool
+import rospy
+from actionlib_msgs.msg import GoalID
+from geometry_msgs.msg import Twist
+from std_msgs.msg import Bool
 
+from ..ros_clients import ensure_rospy
 from . import _node_runner as runner
-
-# Global variable to keep track of the timer so we can cancel it if needed
-_exploration_timer = None
-
-def _stop_exploration_callback():
-    """Internal function to stop the robot when time is up."""
-    # 1. Cancel the current goal so the robot stops moving immediately
-    os.system("rostopic pub -1 /move_base/cancel actionlib_msgs/GoalID '{}' > /dev/null 2>&1")
-    
-    # 2. Kill the planner node on the robot via the network
-    # This stops the 'got new plan' loop
-    os.system("rosnode kill /frontier_goal_selector > /dev/null 2>&1")
-    print("Autonomy Stop: Timer expired or manual stop triggered.")
 
 @tool
 def start_cam_coverage_node(
@@ -68,8 +59,6 @@ def reset_cam_coverage() -> str:
     """
     Reset the accumulated camera coverage map (calls /cam_coverage/reset via rospy).
     """
-    from ..ros_clients import ensure_rospy
-
     ensure_rospy()
     return runner.call_reset_cam_coverage()
 
@@ -157,6 +146,40 @@ def start_straight_planner_node(
     }
     return runner.spawn_node("straight_planner", params)
 
+
+@tool
+def stop_exploration() -> str:
+    """
+    Stops the autonomous exploration process completely.
+    Kills the frontier goal selector node, cancels active navigation 
+    goals, and halts the robot's motors immediately.
+    Use this when the user says 'stop exploring', 'halt exploration', or 'stop mapping'.
+    """
+    print("[TOOL] Stopping exploration forcefully...")
+    
+    # 1. Kill the "brain" that is sending new goals
+    os.system("rosnode kill /move_base")
+    
+    # 2. Apply the emergency brake for move_base and the physical motors
+    try:
+        cancel_pub = rospy.Publisher('/move_base/cancel', GoalID, queue_size=10)
+        vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
+        
+        # Wait a fraction of a second so ROS can register the publishers
+        rospy.sleep(0.2) 
+        
+        # Publish an empty GoalID to cancel all active move_base goals
+        cancel_pub.publish(GoalID())
+        
+        # Publish an empty Twist message (all zeros) to physically stop the motors
+        vel_pub.publish(Twist()) 
+        
+        return "Exploration stopped. Frontier goal selector killed, and robot halted."
+        
+    except Exception as e:
+        return f"Killed exploration node, but encountered an error halting motors: {e}"
+
+
 @tool
 def start_mapping_exploration() -> str:
     """
@@ -177,3 +200,34 @@ def start_mapping_exploration() -> str:
     subprocess.Popen(ssh_command)
     
     return "Exploration started silently. The robot is moving. Terminal remains clean."
+
+
+@tool
+def set_exploration_enabled(enabled: bool = True) -> str:
+    """
+    Pause or resume frontier exploration without killing the planner node.
+
+    When disabled (enabled=False):
+    - Cancels the current navigation goal
+    - Stops the robot
+    - Prevents new goals from being selected
+
+    When enabled (enabled=True):
+    - Resumes exploration from the current position
+    - New frontier goals will be selected
+
+    Args:
+        enabled: True to enable/resume exploration, False to pause/stop.
+    """
+    ensure_rospy()
+    try:
+        pub = rospy.Publisher("/exploration_enabled", Bool, queue_size=1, latch=True)
+        rospy.sleep(0.1)
+        pub.publish(Bool(data=enabled))
+        state = "enabled" if enabled else "disabled"
+        return (
+            f"Exploration {state}. Robot will "
+            f"{'resume selecting new goals' if enabled else 'stop and hold position'}."
+        )
+    except Exception as exc:
+        return f"Failed to set exploration state: {exc}"
