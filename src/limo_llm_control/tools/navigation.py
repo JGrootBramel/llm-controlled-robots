@@ -13,8 +13,9 @@ import os
 from langchain.tools import tool
 import rospy
 from actionlib_msgs.msg import GoalID
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, PoseStamped
 from std_msgs.msg import Bool
+from tf.transformations import quaternion_from_euler
 
 from ..ros_clients import ensure_rospy
 from . import _node_runner as runner
@@ -231,3 +232,56 @@ def set_exploration_enabled(enabled: bool = True) -> str:
         )
     except Exception as exc:
         return f"Failed to set exploration state: {exc}"
+
+
+@tool
+def go_to_map_pose(
+    x_m: float,
+    y_m: float,
+    yaw_deg: float = 0.0,
+    frame_id: str = "map",
+    goal_topic: str = "/move_base_simple/goal",
+) -> str:
+    """
+    Send a single navigation goal in map coordinates.
+
+    This publishes a geometry_msgs/PoseStamped to a navigation goal topic
+    (by default /move_base_simple/goal) in the specified frame (default 'map').
+
+    Args:
+        x_m: Target x position in meters (map frame).
+        y_m: Target y position in meters (map frame).
+        yaw_deg: Target heading in degrees (0° = +X axis).
+        frame_id: Reference frame for the goal, usually 'map'.
+        goal_topic: Goal topic, typically /move_base_simple/goal or /move_base/goal bridge.
+    """
+    ensure_rospy()
+
+    if not goal_topic.strip():
+        return "Invalid goal_topic: empty string is not allowed."
+    if not frame_id.strip():
+        return "Invalid frame_id: empty string is not allowed."
+
+    pub = rospy.Publisher(goal_topic.strip(), PoseStamped, queue_size=1)
+    rospy.sleep(0.2)
+
+    yaw_rad = yaw_deg * 3.141592653589793 / 180.0
+    qx, qy, qz, qw = quaternion_from_euler(0.0, 0.0, yaw_rad)
+
+    goal = PoseStamped()
+    goal.header.stamp = rospy.Time.now()
+    goal.header.frame_id = frame_id.strip()
+    goal.pose.position.x = float(x_m)
+    goal.pose.position.y = float(y_m)
+    goal.pose.position.z = 0.0
+    goal.pose.orientation.x = qx
+    goal.pose.orientation.y = qy
+    goal.pose.orientation.z = qz
+    goal.pose.orientation.w = qw
+
+    pub.publish(goal)
+
+    return (
+        f"Published navigation goal to {goal_topic.strip()} in frame '{frame_id.strip()}' "
+        f"at (x={x_m:.2f}, y={y_m:.2f}, yaw={yaw_deg:.1f}°)."
+    )

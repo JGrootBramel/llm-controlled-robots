@@ -19,6 +19,7 @@ from .navigation import (
     start_mapping_exploration,
     stop_exploration,
     set_exploration_enabled,
+    go_to_map_pose,
 )
 from .perception import (
     start_blue_cube_grasper_node,
@@ -42,5 +43,6 @@ __all__ = [
     "start_mapping_exploration",
     "set_exploration_enabled",
     "show_camera_feed",
-    "stop_exploration"
+    "stop_exploration",
+    "go_to_map_pose",
 ]
