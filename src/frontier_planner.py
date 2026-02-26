@@ -12,6 +12,7 @@ from map_msgs.msg import OccupancyGridUpdate
 from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion, Twist
 from std_msgs.msg import Bool
 from nav_msgs.srv import GetPlan, GetPlanRequest
+from std_srvs.srv import SetBool, SetBoolResponse
 
 import actionlib
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
@@ -84,6 +85,7 @@ class FrontierPlanner:
         self.detector_ready = False
         self.initial_spin_done = False
         self.approached = False
+        self.exploration_enabled = True  # Controls whether exploration loop runs
 
         self.plan_fail_count = 0
         self.last_goal_distance = None
@@ -100,6 +102,10 @@ class FrontierPlanner:
         self.found_sub = rospy.Subscriber("/object_found", Bool, self.found_cb, queue_size=1)
         self.object_pose_sub = rospy.Subscriber("/object_pose", PoseStamped, self.object_pose_cb, queue_size=1)
         self.ready_sub = rospy.Subscriber("/object_detection_ready", Bool, self.ready_cb, queue_size=1)
+        
+        # Exploration enable/disable control
+        self.enable_sub = rospy.Subscriber("/exploration_enabled", Bool, self.enable_cb, queue_size=1)
+        self.enable_srv = rospy.Service("~set_exploration_enabled", SetBool, self.set_exploration_enabled_srv)
 
         self.goal_pub = rospy.Publisher(self.goal_topic, PoseStamped, queue_size=1)
         self.pub_cmd_vel = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
@@ -170,6 +176,43 @@ class FrontierPlanner:
         Exploration does not start until this flag becomes True.
         """
         self.detector_ready = bool(msg.data)
+
+    def enable_cb(self, msg: Bool):
+        """
+        Callback for enabling/disabling exploration via topic.
+        When disabled, cancels any active goal and stops the robot.
+        """
+        self._set_exploration_enabled(bool(msg.data))
+
+    def set_exploration_enabled_srv(self, req):
+        """
+        Service handler for enabling/disabling exploration.
+        When disabled, cancels any active goal and stops the robot.
+        """
+        self._set_exploration_enabled(req.data)
+        state = "enabled" if req.data else "disabled"
+        return SetBoolResponse(success=True, message=f"Exploration {state}")
+
+    def _set_exploration_enabled(self, enabled: bool):
+        """
+        Internal method to set exploration state.
+        When disabling, cancels the current goal and stops the robot.
+        """
+        was_enabled = self.exploration_enabled
+        self.exploration_enabled = enabled
+        
+        if was_enabled and not enabled:
+            # Disabling exploration: cancel current goal and stop
+            rospy.loginfo("[frontier_selector] Exploration DISABLED - canceling goals and stopping")
+            self.mb.cancel_all_goals()
+            self.current_goal = None
+            self.plan_fail_count = 0
+            self.last_goal_distance = None
+            # Send stop command
+            stop_twist = Twist()
+            self.pub_cmd_vel.publish(stop_twist)
+        elif not was_enabled and enabled:
+            rospy.loginfo("[frontier_selector] Exploration ENABLED - resuming")
 
     def _mb_done_cb(self, status, result):
         """
@@ -248,6 +291,7 @@ class FrontierPlanner:
         Check whether the planner has all required data to perform one tick.
 
         Conditions checked:
+        - Exploration is enabled (not paused/stopped).
         - Global costmap and camera coverage map are available.
         - Robot is not already in approach mode.
         - Object detector is active.
@@ -257,6 +301,10 @@ class FrontierPlanner:
             True  → All inputs valid, planner may proceed.
             False → Missing data or inconsistent maps.
         """
+        # Check if exploration is enabled first
+        if not self.exploration_enabled:
+            return False
+        
         if self.costmap_msg is None or self.cov_msg is None or self.approached or not self.detector_ready:
             return False
         

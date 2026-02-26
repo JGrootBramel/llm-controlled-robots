@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/cps-orin/llm-controlled-robots/devel/setup.sh

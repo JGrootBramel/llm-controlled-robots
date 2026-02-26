@@ -19,8 +19,6 @@ from limo_llm_control.tools import (
     stop_autonomy_nodes,
     turn_in_place,
     update_object_query,
-    show_camera_feed,           
-    start_mapping_exploration  
 )
 
 __all__ = [
@@ -35,6 +33,4 @@ __all__ = [
     "start_blue_cube_grasper_node",
     "stop_autonomy_nodes",
     "get_autonomy_status",
-    "show_camera_feed",
-    "start_mapping_exploration",
 ]

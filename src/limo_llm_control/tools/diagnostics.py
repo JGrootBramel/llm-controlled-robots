@@ -36,6 +36,8 @@ def stop_autonomy_nodes(node: Literal["all", "frontier_planner"] = "all") -> str
         
     return "Autonomy halted: Brain killed, waited for shutdown, and wheels locked."
 
+
+
 @tool
 def get_autonomy_status() -> str:
     """Return status for managed autonomy subprocesses and key ROS state topics."""
