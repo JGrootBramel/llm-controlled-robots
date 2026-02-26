@@ -11,6 +11,7 @@ from time import time
 import os
 
 from langchain.tools import tool
+import json
 import rospy
 from actionlib_msgs.msg import GoalID
 from geometry_msgs.msg import Twist, PoseStamped
@@ -261,6 +262,29 @@ def go_to_map_pose(
         return "Invalid goal_topic: empty string is not allowed."
     if not frame_id.strip():
         return "Invalid frame_id: empty string is not allowed."
+
+    # #region agent log
+    try:
+        log_payload = {
+            "sessionId": "7fef08",
+            "runId": "pre-fix",
+            "hypothesisId": "H1",
+            "location": "navigation.go_to_map_pose",
+            "message": "Publishing map goal",
+            "data": {
+                "x_m": float(x_m),
+                "y_m": float(y_m),
+                "yaw_deg": float(yaw_deg),
+                "frame_id": frame_id.strip(),
+                "goal_topic": goal_topic.strip(),
+            },
+            "timestamp": int(time() * 1000),
+        }
+        with open("/home/cps-orin/llm-controlled-robots/.cursor/debug-7fef08.log", "a") as _f:
+            _f.write(json.dumps(log_payload) + "\n")
+    except Exception:
+        pass
+    # #endregion agent log
 
     pub = rospy.Publisher(goal_topic.strip(), PoseStamped, queue_size=1)
     rospy.sleep(0.2)
