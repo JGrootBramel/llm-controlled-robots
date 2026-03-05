@@ -1,0 +1,44 @@
+<launch>
+  <!-- 1) Base + sensors -->
+  <include file="$(find limo_bringup)/launch/limo_start.launch" />
+
+  <!-- 2) Static map server (uses saved map instead of gmapping) -->
+  <node pkg="map_server"
+        type="map_server"
+        name="static_map_server"
+        args="/home/agilex/llm-controlled-robots/catkin_ws/src/limo_rosa_bridge/launch/limo_lab_map.yaml"
+        output="screen">
+    <param name="frame_id" value="map" />
+    <!-- If your map_server uses 'map_frame' instead of 'frame_id', use this instead:
+    <param name="map_frame" value="map" />
+    -->
+  </node>
+
+  <!-- 3) Localization: REQUIRED to create map -> odom -->
+  <include file="$(find limo_bringup)/launch/limo_amcl.launch" />
+
+  <!-- 4) Navigation stack (move_base) -->
+  <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
+
+  <!-- 5) Camera + rosbridge as before -->
+  <include file="$(find astra_camera)/launch/astra_pro.launch">
+      <arg name="enable_depth" value="true" />
+      <arg name="depth_align" value="true" />
+      
+      <arg name="color_width" value="320" />
+      <arg name="color_height" value="240" />
+      <arg name="depth_width" value="320" />
+      <arg name="depth_height" value="240" />
+  </include>
+  <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" />
+
+  <!-- 6) ROSA autonomy (optional, same as before) -->
+  <include file="$(find limo_rosa_bridge)/launch/autonomy_core.launch">
+    <arg name="use_frontier_planner" value="false" />
+    <arg name="use_straight_planner" value="false" />
+  </include>
+
+  <include file="$(find limo_rosa_bridge)/launch/autonomy_perception.launch" />
+  
+  <include file="$(find limo_rosa_bridge)/launch/autonomy_blue_grasp.launch" />
+</launch>

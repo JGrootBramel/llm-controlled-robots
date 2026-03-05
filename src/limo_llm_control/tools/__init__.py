@@ -27,13 +27,13 @@ from .perception import (
     update_object_query,
     show_camera_feed
 )
+from .cubes import scan_for_blue_cubes, fetch_and_store_cube
 
 __all__ = [
     "turn_in_place",
     "drive_distance",
     "start_cam_coverage_node",
     "reset_cam_coverage",
-    #"start_frontier_planner_node",
     "start_straight_planner_node",
     "start_object_finder_node",
     "update_object_query",
@@ -45,4 +45,6 @@ __all__ = [
     "show_camera_feed",
     "stop_exploration",
     "go_to_map_pose",
+    "scan_for_blue_cubes",
+    "fetch_and_store_cube",
 ]

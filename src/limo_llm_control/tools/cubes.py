@@ -3,7 +3,7 @@ import math
 from typing import TYPE_CHECKING, Any
 from geometry_msgs.msg import Twist, PointStamped
 from std_srvs.srv import Trigger
-from rosa import tool # Import your standard ROSA tool decorator
+from langchain.tools import tool
 import actionlib
 from actionlib_msgs.msg import GoalStatus
 
