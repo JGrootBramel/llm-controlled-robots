@@ -24,7 +24,8 @@ import cv2
 
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CameraInfo
-from geometry_msgs.msg import PointStamped
+from geometry_msgs.msg import PointStamped, PoseStamped
+from std_msgs.msg import Bool
 from pymycobot import MyCobot280
 
 
@@ -59,6 +60,7 @@ class BlueCubeGrasper:
         self.require_stable_hits = int(rospy.get_param("~stable_hits", 3))
         self.hit_count = 0
         self.last_target_base = None
+        self.grasped = False  # Track if we've already grasped
 
         # MyCobot
         self.mc_port = rospy.get_param("~port", "/dev/ttyACM0")
@@ -75,6 +77,12 @@ class BlueCubeGrasper:
 
         self.bridge = CvBridge()
 
+        # --- Publishers for frontier planner integration ---
+        self.pub_ready = rospy.Publisher("/object_detection_ready", Bool, queue_size=1, latch=True)
+        self.pub_found = rospy.Publisher("/object_found", Bool, queue_size=1, latch=True)
+        self.pub_pose = rospy.Publisher("/object_pose", PoseStamped, queue_size=1)
+        self.pub_approached = rospy.Publisher("/object_approached", Bool, queue_size=1, latch=True)
+
         # --- Sync subscribers ---
         s_rgb = message_filters.Subscriber(self.rgb_topic, Image)
         s_depth = message_filters.Subscriber(self.depth_topic, Image)
@@ -89,6 +97,8 @@ class BlueCubeGrasper:
         if self.show_debug_window:
             rospy.on_shutdown(self._close_debug_window)
 
+        # Signal that detection is ready
+        self.pub_ready.publish(Bool(data=True))
         rospy.loginfo("blue_cube_grasper ready")
 
     def cb(self, rgb_msg: Image, depth_msg: Image, info_msg: CameraInfo):
@@ -142,6 +152,16 @@ class BlueCubeGrasper:
         self.hit_count += 1
         self.last_target_base = p_base
 
+        # Publish object pose for frontier planner integration
+        pose_msg = PoseStamped()
+        pose_msg.header.stamp = rgb_msg.header.stamp
+        pose_msg.header.frame_id = self.base_frame
+        pose_msg.pose.position.x = p_base[0]
+        pose_msg.pose.position.y = p_base[1]
+        pose_msg.pose.position.z = p_base[2]
+        pose_msg.pose.orientation.w = 1.0  # identity quaternion
+        self.pub_pose.publish(pose_msg)
+
         rospy.loginfo_throttle(
             1.0,
             "blue blob area=%d | uv=(%d,%d) Z=%.3f | base=(%.3f,%.3f,%.3f) hits=%d/%d",
@@ -152,8 +172,17 @@ class BlueCubeGrasper:
         self._show_debug(dbg, (u, v), int(area))
 
         if self.hit_count >= self.require_stable_hits:
+            # Signal object found to frontier planner (stops exploration)
+            if not self.grasped:
+                self.pub_found.publish(Bool(data=True))
+                rospy.loginfo("Blue cube confirmed - signaling object_found=True")
+
             # Reset counter to avoid repeated grasps
             self.hit_count = 0
+
+            # Skip if already grasped
+            if self.grasped:
+                return
 
             # Convert base_link meters -> arm mm 
             x_top, y_top, z_top = p_base  # in meters, base_link
@@ -162,7 +191,7 @@ class BlueCubeGrasper:
             y_mm = y_top * 1000.0
             z_mm = z_top * 1000.0
 
-            # base_link -> arm frame mapping (the arm is 90Â° rotated compared to the simulation)
+            # base_link -> arm frame mapping (the arm is 90° rotated compared to the simulation)
             X_arm = y_mm
             Y_arm = -x_mm
             Z_arm = z_mm
@@ -174,6 +203,12 @@ class BlueCubeGrasper:
 
             ok = self.do_grasp(X_arm, Y_arm, Z_arm)
             rospy.loginfo("Grasp result: %s", "SUCCESS" if ok else "FAIL")
+
+            # Signal grasp completion to frontier planner
+            if ok:
+                self.grasped = True
+                self.pub_approached.publish(Bool(data=True))
+                rospy.loginfo("Blue cube grasped successfully - signaling object_approached=True")
 
             # Return to a safe pose after grasp attempt
             try:

@@ -1,0 +1,91 @@
+<launch>
+  <!--
+    Full autonomy pipeline: Explore + Detect Blue Cube + Grasp
+    
+    This launch file starts:
+    1. Camera coverage mapping (tracks what areas have been seen)
+    2. Frontier planner (explores unseen areas)
+    3. Blue cube detector + grasper (finds and picks up blue cube)
+    
+    When the blue cube is detected, the frontier planner will switch to 
+    object-approach mode and navigate to the cube for grasping.
+    
+    Usage:
+      roslaunch limo_rosa_bridge explore_and_grasp_blue.launch
+      
+    Optional args:
+      show_debug_window:=true   - Show OpenCV debug windows
+      use_straight_planner:=true - Use straight-line planner instead of frontier
+  -->
+
+  <!-- ==================== ARGUMENTS ==================== -->
+  
+  <!-- Coverage & Planning -->
+  <arg name="coverage_range_m" default="1.5" />
+  <arg name="camera_info_topic" default="/camera/color/camera_info" />
+  <arg name="camera_frame" default="camera_link" />
+  <arg name="map_topic" default="/map" />
+  <arg name="coverage_topic" default="/cam_coverage" />
+  <arg name="goal_topic" default="/move_base_simple/goal" />
+  <arg name="global_costmap_topic" default="/move_base/global_costmap/costmap" />
+  <arg name="min_frontier_dist_m" default="0.3" />
+  <arg name="safety_radius_m" default="0.2" />
+  <arg name="strategy" default="closest" />
+
+  <!-- Planner choice -->
+  <arg name="use_frontier_planner" default="true" />
+  <arg name="use_straight_planner" default="false" />
+
+  <!-- Blue Cube Detection -->
+  <arg name="stable_hits" default="3" doc="Consecutive detections before confirming object" />
+  <arg name="depth_min" default="0.10" doc="Min detection depth (m)" />
+  <arg name="depth_max" default="2.50" doc="Max detection depth (m)" />
+  <arg name="min_area_px" default="900" doc="Min blob area in pixels" />
+  <arg name="base_frame" default="base_link" />
+
+  <!-- Debug visualization -->
+  <arg name="show_debug_window" default="false" />
+  <arg name="debug_window_name" default="blue_cube_debug" />
+
+  <!-- ==================== CAMERA COVERAGE ==================== -->
+  <node pkg="limo_rosa_bridge" type="cam_coverage_node.py" name="cam_coverage_node" output="screen">
+    <param name="range_m" value="$(arg coverage_range_m)" />
+    <param name="camera_info_topic" value="$(arg camera_info_topic)" />
+    <param name="frame_camera" value="$(arg camera_frame)" />
+    <param name="map_topic" value="$(arg map_topic)" />
+    <param name="coverage_topic" value="$(arg coverage_topic)" />
+  </node>
+
+  <!-- ==================== FRONTIER PLANNER ==================== -->
+  <group if="$(arg use_frontier_planner)">
+    <node pkg="limo_rosa_bridge" type="frontier_planner_node.py" name="frontier_goal_selector" output="screen">
+      <param name="coverage_topic" value="$(arg coverage_topic)" />
+      <param name="goal_topic" value="$(arg goal_topic)" />
+      <param name="global_costmap_topic" value="$(arg global_costmap_topic)" />
+      <param name="min_frontier_dist_m" value="$(arg min_frontier_dist_m)" />
+      <param name="safety_radius_m" value="$(arg safety_radius_m)" />
+      <param name="strategy" value="$(arg strategy)" />
+    </node>
+  </group>
+
+  <!-- ==================== STRAIGHT PLANNER (alternative) ==================== -->
+  <group if="$(arg use_straight_planner)">
+    <node pkg="limo_rosa_bridge" type="straight_planner_node.py" name="straight_explore_planner" output="screen">
+      <param name="coverage_topic" value="$(arg coverage_topic)" />
+      <param name="goal_topic" value="$(arg goal_topic)" />
+      <param name="global_costmap_topic" value="$(arg global_costmap_topic)" />
+    </node>
+  </group>
+
+  <!-- ==================== BLUE CUBE DETECTOR + GRASPER ==================== -->
+  <node pkg="limo_rosa_bridge" type="pick_cube_blue_node.py" name="blue_cube_grasper" output="screen">
+    <param name="stable_hits" value="$(arg stable_hits)" />
+    <param name="depth_min" value="$(arg depth_min)" />
+    <param name="depth_max" value="$(arg depth_max)" />
+    <param name="min_area_px" value="$(arg min_area_px)" />
+    <param name="base_frame" value="$(arg base_frame)" />
+    <param name="show_debug_window" value="$(arg show_debug_window)" />
+    <param name="debug_window_name" value="$(arg debug_window_name)" />
+  </node>
+
+</launch>
