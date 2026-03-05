@@ -1,28 +1,14 @@
 import rospy
 import math
-from typing import TYPE_CHECKING, Any
 from geometry_msgs.msg import Twist, PointStamped
 from std_srvs.srv import Trigger
 from langchain.tools import tool
 import actionlib
 from actionlib_msgs.msg import GoalStatus
-
-# NOTE: In many dev/editor environments, ROS message packages (like move_base_msgs)
-# are not on PYTHONPATH unless the ROS environment is sourced. Keep runtime behavior
-# correct while avoiding hard import failures in tooling.
-try:
-    from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal  # type: ignore[import-not-found]
-except Exception:  # pragma: no cover
-    MoveBaseAction = Any  # type: ignore[assignment]
-    MoveBaseGoal = Any  # type: ignore[assignment]
-
-if TYPE_CHECKING:
-    from move_base_msgs.msg import MoveBaseAction as _MoveBaseAction  # type: ignore[import-not-found]
-    from move_base_msgs.msg import MoveBaseGoal as _MoveBaseGoal  # type: ignore[import-not-found]
 from tf.transformations import quaternion_from_euler
 
 @tool
-def scan_for_blue_cubes(duration_seconds: int = 10) -> str:
+def scan_for_blue_cubes(duration_seconds: int = 25) -> str:
     """
     Spins the robot in a circle to scan the room for blue cubes.
     Returns a list of the X, Y coordinates of all unique cubes found.
@@ -41,7 +27,7 @@ def scan_for_blue_cubes(duration_seconds: int = 10) -> str:
     
     # Spin the robot slowly
     tw = Twist()
-    tw.angular.z = 0.5 
+    tw.angular.z = 0.2
     
     end_time = rospy.Time.now() + rospy.Duration(duration_seconds)
     rate = rospy.Rate(10)
@@ -69,6 +55,13 @@ def fetch_and_store_cube(cube_x: float, cube_y: float) -> str:
     Drives the robot to a blue cube, picks it up, and places it on the tray.
     Provide the exact cube_x and cube_y coordinates found from the scan.
     """
+    # 0. Import move_base message types lazily so rosa_agent can start
+    # even on machines without the ROS move_base_msgs package installed.
+    try:
+        from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal  # type: ignore[import-not-found]
+    except Exception as exc:  # pragma: no cover
+        return f"Error: move_base_msgs is not available in this environment: {exc}"
+
     # 1. We must calculate a standoff position so the robot doesn't run over the cube!
     # Get current robot position using TF
     import tf2_ros

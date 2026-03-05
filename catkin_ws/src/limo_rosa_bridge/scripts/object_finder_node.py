@@ -19,6 +19,8 @@ from pymycobot import MyCobot280
 
 from nanoowl.owl_predictor import OwlPredictor
 
+from visualization_msgs.msg import Marker
+
 
 class ObjectFinder:
     """
@@ -186,6 +188,7 @@ class ObjectFinder:
         self.pub_found  = rospy.Publisher("/object_found", Bool, queue_size=1, latch=True)
         self.pub_ready  = rospy.Publisher("/object_detection_ready", Bool, queue_size=1, latch=True)
         self.pub_pose   = rospy.Publisher("/object_pose",  PoseStamped, queue_size=1, latch=True)
+        self.pub_marker = rospy.Publisher("/detected_cube_markers", Marker, queue_size=10)
         self.pub_goal   = rospy.Publisher("/move_base_simple/goal", PoseStamped, queue_size=1)
         self.pub_cmd_vel = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
         self.pub_dbg    = (rospy.Publisher("/object_debug", Image, queue_size=1) if self.publish_debug else None)
@@ -703,6 +706,37 @@ class ObjectFinder:
 
         pose.pose.orientation = Quaternion(*quaternion_from_euler(0, 0, yaw))
         self.pub_pose.publish(pose)
+
+        # --- BULLETPROOF RVIZ MARKER ---
+        marker = Marker()
+        marker.header.frame_id = self.target_frame
+        marker.header.stamp = rospy.Time.now()
+        marker.ns = "blue_cubes"
+        
+        # Use a simple grid-based ID to keep markers persistent
+        # This rounds to 10cm chunks so we don't spam 100 markers for 1 cube
+        grid_x = int(p_map[0] * 10)
+        grid_y = int(p_map[1] * 10)
+        marker.id = grid_x + (grid_y * 1000)
+        
+        marker.type = Marker.CUBE
+        marker.action = Marker.ADD  # Explicitly tell RViz to ADD/KEEP
+        
+        marker.pose.position.x = p_map[0]
+        marker.pose.position.y = p_map[1]
+        marker.pose.position.z = p_map[2]
+        marker.pose.orientation.w = 1.0 
+        
+        marker.scale.x = 0.05
+        marker.scale.y = 0.05
+        marker.scale.z = 0.05
+        
+        marker.color.r = 0.0; marker.color.g = 0.0; marker.color.b = 1.0; marker.color.a = 1.0 
+        
+        # 0 means the marker stays forever until you restart RViz
+        marker.lifetime = rospy.Duration(0) 
+        
+        self.marker_pub.publish(marker)
 
     def _update_detection_state(self, rgb_msg, depth_msg, info_msg,
                             x1, y1, x2, y2, u, v, Z, p_base, p_map):
