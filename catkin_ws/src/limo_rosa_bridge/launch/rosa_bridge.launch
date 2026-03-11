@@ -5,7 +5,7 @@
 
     <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
 
-    <!-- Astra Pro @ 320x200 @ 30 Hz RGB -->
+    <!-- Astra Pro: 320x200 RGB @ 30 Hz -->
     <include file="$(find astra_camera)/launch/astra_pro.launch">
       <arg name="enable_depth" value="true" />
       <arg name="depth_align" value="true" />
