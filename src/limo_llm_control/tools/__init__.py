@@ -15,6 +15,7 @@ from .motion import drive_distance, turn_in_place
 from .navigation import (
     reset_cam_coverage,
     start_cam_coverage_node,
+    start_frontier_planner_node,
     start_straight_planner_node,
     start_mapping_exploration,
     stop_exploration,
