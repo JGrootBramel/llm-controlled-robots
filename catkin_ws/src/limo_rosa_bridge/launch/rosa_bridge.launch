@@ -5,14 +5,14 @@
 
     <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
 
-    <!-- Astra Pro: 320x200 RGB @ 30 Hz -->
+    <!-- Astra Pro: 320x200 @ 10 Hz color (30 Hz causes UVC crash; camera must run for debug windows) -->
     <include file="$(find astra_camera)/launch/astra_pro.launch">
       <arg name="enable_depth" value="true" />
       <arg name="depth_align" value="true" />
 
       <arg name="color_width" value="320" />
       <arg name="color_height" value="200" />
-      <arg name="color_fps" value="30" />
+      <arg name="color_fps" value="10" />
 
       <arg name="depth_width" value="320" />
       <arg name="depth_height" value="200" />

@@ -27,7 +27,7 @@
 
       <arg name="color_width" value="320" />
       <arg name="color_height" value="200" />
-      <arg name="color_fps" value="30" />
+      <arg name="color_fps" value="10" />
 
       <arg name="depth_width" value="320" />
       <arg name="depth_height" value="200" />
