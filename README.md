@@ -110,20 +110,27 @@ This starts:
 
 ## Remote
 
-cd src\
-python3.9 -m venv venv\
-source venv/bin/activate\
-pip install -r requirements.txt
+```bash
+cd ~/llm-controlled-robots
+python3.9 -m venv venv
+source venv/bin/activate
+pip install -r requirements-remote.txt
+```
 
-Configure .env:
+Configure `.env` in the repo root:
 
-OPENAI_API_KEY=your_key\
-ROS_MASTER_URI=http://`<robot_ip>`{=html}:11311\
-ROS_IP=`<remote_pc_ip>`{=html}
+```bash
+OPENAI_API_KEY=your_key
+ROS_MASTER_URI=http://<robot_ip>:11311
+ROS_IP=<remote_pc_ip>
+```
 
-Run:
+Run the ROSA LIMO agent (robot profile):
 
-python -m limo_llm_control.main --profile robot
+```bash
+cd ~/llm-controlled-robots
+python src/launch_rosa.py
+```
 
 ------------------------------------------------------------------------
 

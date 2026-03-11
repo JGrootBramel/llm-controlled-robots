@@ -43,6 +43,7 @@ class BlueCubeGrasper:
         self.v_low = 30    # See blue even in deep shadows
 
         # --- State Tracking ---
+        self.require_stable_hits = int(rospy.get_param("~stable_hits", 3))
         self.hit_count = 0
         self.last_p_map = None # Stores the latest coordinate for the grasp
         self.grasp_armed = False 
@@ -146,10 +147,10 @@ class BlueCubeGrasper:
 
         # 4. THE GRASP TRIGGER
         self.hit_count += 1
-        if self.hit_count >= self.require_stable_hits and self.grasp_armed:
+        if self.hit_count >= self.require_stable_hits and self.grasp_armed and p_base is not None:
             rospy.loginfo("STABLE HIT FOUND! Executing Physical Grasp...")
             self.grasp_armed = False # Reset trigger
-            
+
             # Map coordinates to Arm Space
             x_top, y_top, z_top = p_base
             X_arm = y_top * 1000.0

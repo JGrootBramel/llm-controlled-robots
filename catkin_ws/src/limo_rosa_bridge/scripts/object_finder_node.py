@@ -738,7 +738,7 @@ class ObjectFinder:
         # 0 means the marker stays forever until you restart RViz
         marker.lifetime = rospy.Duration(0) 
         
-        self.marker_pub.publish(marker)
+        self.pub_marker.publish(marker)
 
     def _update_detection_state(self, rgb_msg, depth_msg, info_msg,
                             x1, y1, x2, y2, u, v, Z, p_base, p_map):
