@@ -67,11 +67,44 @@ llm-controlled-robots/
 
 ## Robot
 
-cd catkin_ws\
-catkin_make\
+```bash
+cd catkin_ws
+catkin_make
 source devel/setup.bash
+```
 
-roslaunch limo_bringup bringup.launch
+### Online SLAM + mapping (gmapping)
+
+For live mapping with `gmapping` and autonomy tools:
+
+```bash
+roslaunch limo_rosa_bridge rosa_bridge.launch
+```
+
+This starts:
+
+- LIMO base drivers (`limo_start.launch`)
+- `limo_gmapping.launch` (online SLAM, publishes `/map`)
+- `limo_move_base.launch` (navigation)
+- Camera + rosbridge
+- Core autonomy nodes (`autonomy_core.launch`, `autonomy_perception.launch`)
+
+### Static map navigation (saved map + AMCL)
+
+After you have built and saved a map (e.g. `limo_lab_map.yaml` in `limo_rosa_bridge/launch`),
+you can restart the robot using the static map navigation launch:
+
+```bash
+roslaunch limo_rosa_bridge test_map.launch
+```
+
+This starts:
+
+- LIMO base drivers
+- `map_server` with your saved map
+- `limo_amcl.launch` (localization on the static map)
+- `limo_move_base.launch` (navigation)
+- Camera + rosbridge + autonomy tools
 
 ------------------------------------------------------------------------
 
