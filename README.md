@@ -96,12 +96,30 @@ python -m limo_llm_control.main --profile robot
 
 ## Simulation
 
-cd sim/docker\
-docker compose up --build
+### Docker Compose (robot + remote)
 
-Then:
+Replicates the two-machine setup in Docker: one container runs the robot stack (Gazebo + bridge), the other runs the ROSA/LLM app and connects via ROS.
 
-python -m limo_llm_control.main --profile sim
+1. **From repo root**, create `.env` from the example and set your API key:
+   ```bash
+   cp .example.env .env
+   # Edit .env and set OPENAI_API_KEY
+   ```
+
+2. **Build and start** (robot and remote services):
+   ```bash
+   docker compose -f sim/docker/docker-compose.yml up --build
+   ```
+   - **robot** container: Gazebo + limo_cobot_sim + limo_rosa_bridge (ROS master).
+   - **remote** container: waits for roscore, then starts `python -m limo_llm_control.main` (ROSA chat).
+
+3. **Optional (GUI)**: To show Gazebo/RViz, run with X11:
+   - Linux: ensure `xhost +local:root`, then in `sim/docker/docker-compose.yml` uncomment the `DISPLAY`, `QT_X11_NO_MITSHM`, and `/tmp/.X11-unix` volume for the `robot` service; pass `-e DISPLAY` when needed.
+   - Windows: use WSL2 and Docker Desktop with WSL integration; same X11 forwarding as in [docs/quickstart](docs/quickstart.md).
+
+4. **Single-container (legacy)**  
+   From repo root: `./setup.sh` then `./run_simulation.sh`. Then in another terminal, `docker exec -it <container> bash` and run `bash /workspace/llm-controlled-robots/start_rosa.sh`.  
+   Or: `python -m limo_llm_control.main --profile sim` inside that container.
 
 ------------------------------------------------------------------------
 

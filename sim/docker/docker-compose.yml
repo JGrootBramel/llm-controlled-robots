@@ -1,0 +1,69 @@
+# Docker Compose: robot + remote (replicates two-machine setup)
+# Robot: ROS Noetic + Gazebo + limo_cobot_sim + limo_rosa_bridge
+# Remote: ROSA (jpl-rosa) + limo_llm_control, connects to robot via ROS_MASTER_URI
+#
+# From repo root:  docker compose -f sim/docker/docker-compose.yml up --build
+# From sim/docker: docker compose -f docker-compose.yml up --build  (use context below)
+
+services:
+  robot:
+    build:
+      context: ../..
+      dockerfile: sim/docker/Dockerfile
+    image: noetic-gazebo-rosa
+    container_name: limo_robot
+    hostname: robot
+    # GUI: pass X11 socket when on a host with X11
+    volumes:
+      - ../../:/workspace/llm-controlled-robots
+      # WSLg X11 and Wayland mounts for GUI:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /mnt/wslg:/mnt/wslg
+    env_file:
+      - ../../.env
+    # Required for Gazebo/RViz display:
+    environment:
+      - ROS_IP=robot
+      - ROS_HOSTNAME=robot
+      - LIBGL_ALWAYS_SOFTWARE=1
+      # Note: we are purposefully hiding the DISPLAY variables so Qt plugins won't crash 
+      # trying to connect to a missing server.
+      # - DISPLAY=${DISPLAY:-:0}
+      # - WAYLAND_DISPLAY=${WAYLAND_DISPLAY}
+      # - XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/1000}
+      # - PULSE_SERVER=${PULSE_SERVER}
+      # - QT_X11_NO_MITSHM=1
+    expose:
+      - "11311"   # ROS master
+      - "9090"    # rosbridge
+    # Using xvfb-run to fake a display and prevent GUI crashes
+    command: >
+      bash -lc "source /root/catkin_ws/devel/setup.bash &&
+      sudo apt-get update && sudo apt-get install -y xvfb &&
+      xvfb-run -a roslaunch limo_cobot_moveit demo_gazebo.launch"
+    networks:
+      - rosnet
+
+  remote:
+    image: noetic-gazebo-rosa
+    container_name: limo_remote
+    hostname: remote
+    depends_on:
+      - robot
+    environment:
+      - ROS_MASTER_URI=http://robot:11311
+      - ROS_IP=remote
+      - ROS_HOSTNAME=remote
+      - PYTHONPATH=/workspace/llm-controlled-robots/src:/workspace/llm-controlled-robots/src/tools
+      - LIBGL_ALWAYS_SOFTWARE=1
+    env_file:
+      - ../../.env
+    volumes:
+      - ../../:/workspace/llm-controlled-robots
+    entrypoint: ["bash", "/workspace/llm-controlled-robots/sim/docker/entrypoint-remote.sh"]
+    networks:
+      - rosnet
+
+networks:
+  rosnet:
+    driver: bridge

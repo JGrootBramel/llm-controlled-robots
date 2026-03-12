@@ -72,4 +72,8 @@ These components are compute-flexible and benefit from rapid iteration:
 
 Key principle: the remote PC should call capabilities (services/actions), not pull raw streams unless necessary.
 
+## Docker replication of robot–remote
+
+The same split (robot = Noetic / Python 3.8, remote = Python 3.9+ with jpl-rosa) can be run in Docker using Compose. Two containers: **robot** (Gazebo + limo_cobot_sim + limo_rosa_bridge) and **remote** (ROSA + limo_llm_control). The remote connects to the robot via `ROS_MASTER_URI=http://robot:11311`. See [README](../../README.md) (Simulation → Docker Compose) and [sim/docker/docker-compose.yml](../../sim/docker/docker-compose.yml).
+
 ## Communication Options (Robot ↔ Remote PC)
