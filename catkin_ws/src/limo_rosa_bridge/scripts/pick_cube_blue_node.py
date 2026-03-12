@@ -36,11 +36,22 @@ class BlueCubeGrasper:
         self.min_area_px = int(rospy.get_param("~min_area_px", 50)) # Lowered to see further
         self.median_patch_px = int(rospy.get_param("~median_patch_px", 9))
 
-        # EXTREME BLUE SETTINGS (Wide Open)
-        self.h_low = 90    # Includes Cyan/Teal
-        self.h_high = 150  # Includes Deep Purple/Violet
-        self.s_low = 30    # See blue even if it's washed out/pale
-        self.v_low = 30    # See blue even in deep shadows
+        # Target color: "red" or "blue" (red often better in blue-tinted rooms)
+        self.target_color = rospy.get_param("~target_color", "red").strip().lower()
+        if self.target_color not in ("red", "blue"):
+            self.target_color = "red"
+        # HSV for blue: single band; for red: two bands (H wraps 0/180 in OpenCV)
+        if self.target_color == "blue":
+            self.h_low, self.h_high = 105, 135
+            self.s_low, self.v_low = 80, 50
+            self._red_low1 = self._red_high1 = self._red_low2 = self._red_high2 = None
+        else:
+            # Red: (0–10) and (170–180) in H
+            self._red_low1 = np.array([0, 80, 50], dtype=np.uint8)
+            self._red_high1 = np.array([10, 255, 255], dtype=np.uint8)
+            self._red_low2 = np.array([170, 80, 50], dtype=np.uint8)
+            self._red_high2 = np.array([180, 255, 255], dtype=np.uint8)
+            self.h_low = self.h_high = self.s_low = self.v_low = None
 
         # --- State Tracking ---
         self.require_stable_hits = int(rospy.get_param("~stable_hits", 3))
@@ -80,12 +91,14 @@ class BlueCubeGrasper:
             [s_rgb, s_depth, s_info], queue_size=10, slop=0.15
         )
         self.sync.registerCallback(self.cb)
-        rospy.loginfo("blue_cube_grasper (Tool Server) ready with Blue HSV Filter")
+        rospy.loginfo("blue_cube_grasper (Tool Server) ready with %s HSV filter", self.target_color)
 
     def trigger_grasp_cb(self, req):
-        """Service callback triggered by LLM to execute the grasp."""
+        """Arm the grasp; camera callback will perform it using live detection for better accuracy."""
+        rospy.loginfo("execute_grasp: arming grasp; will use camera to refine pose when cube is in view.")
         self.grasp_armed = True
-        return TriggerResponse(success=True, message="Looking for cube to grasp...")
+        self.hit_count = 0
+        return TriggerResponse(success=True, message="Grasp armed; robot will grasp when cube is detected in camera.")
 
     def cb(self, rgb_msg: Image, depth_msg: Image, info_msg: CameraInfo):
         # 1. Conversion (keep your existing try/except block)
@@ -96,27 +109,29 @@ class BlueCubeGrasper:
                 depth = depth.astype(np.float32) / 1000.0
             else:
                 depth = depth.astype(np.float32)
-        except Exception: return
+        except Exception as e:
+            rospy.logwarn_throttle(5.0, "blue_cube_grasper: cv_bridge error: %s", e)
+            return
 
         H, W = rgb.shape[:2]
         fx, fy, cx, cy = info_msg.K[0], info_msg.K[4], info_msg.K[2], info_msg.K[5]
 
-        # 2. Optimized Detection
+        # 2. Color detection (red or blue)
         hsv = cv2.cvtColor(rgb, cv2.COLOR_BGR2HSV)
-        lower = np.array([self.h_low, self.s_low, self.v_low], dtype=np.uint8)
-        upper = np.array([self.h_high, 255, 255], dtype=np.uint8)
-        mask = cv2.inRange(hsv, lower, upper)
-        
-        # --- REDUCED FILTERING ---
-        # We only use a tiny blur so we don't 'erase' the cube
+        if self.target_color == "blue":
+            lower = np.array([self.h_low, self.s_low, self.v_low], dtype=np.uint8)
+            upper = np.array([self.h_high, 255, 255], dtype=np.uint8)
+            mask = cv2.inRange(hsv, lower, upper)
+        else:
+            # Red wraps at H=0 and H=180
+            mask1 = cv2.inRange(hsv, self._red_low1, self._red_high1)
+            mask2 = cv2.inRange(hsv, self._red_low2, self._red_high2)
+            mask = cv2.bitwise_or(mask1, mask2)
         mask = cv2.GaussianBlur(mask, (5, 5), 0)
-        
-        # SHOW DEBUG WINDOW (This should now show the cube!)
-        cv2.imshow("Blue_Filter_Debug", mask)
-        cv2.waitKey(1)
 
         cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not cnts:
+            rospy.logdebug("blue_cube_grasper: no contours found")
             self.hit_count = 0
             return
 
@@ -124,6 +139,7 @@ class BlueCubeGrasper:
         area = cv2.contourArea(best_cnt)
         
         if area < self.min_area_px:
+            rospy.logdebug("blue_cube_grasper: contour too small (area=%.1f)", area)
             self.hit_count = 0
             return
 
@@ -132,7 +148,9 @@ class BlueCubeGrasper:
 
         # 3. Depth & Transform
         Z = self._median_depth_patch(depth, u, v, H, W)
-        if Z is None: return
+        if Z is None:
+            rospy.logdebug("blue_cube_grasper: no valid depth at u=%d v=%d", u, v)
+            return
 
         Xc, Yc = (u - cx) * Z / fx, (v - cy) * Z / fy
         p_base = self._to_frame(info_msg, rgb_msg, Xc, Yc, Z, self.base_frame)
@@ -141,22 +159,56 @@ class BlueCubeGrasper:
         if p_map is not None:
             # Update 'last known' for the grasp service
             self.last_p_map = p_map 
-            
-            # Marker & Publisher (Keep your existing code here)
-            # ... [Existing Marker Logic] ...
 
-        # 4. THE GRASP TRIGGER
+            # Publish map-frame cube pose for higher-level tools (ROSA / scan_for_blue_cubes)
+            cube_msg = PointStamped()
+            cube_msg.header.stamp = rgb_msg.header.stamp
+            cube_msg.header.frame_id = self.target_frame
+            cube_msg.point.x = float(p_map[0])
+            cube_msg.point.y = float(p_map[1])
+            cube_msg.point.z = float(p_map[2])
+            self.cube_pub.publish(cube_msg)
+            rospy.loginfo_throttle(
+                1.0,
+                "blue_cube_grasper: published cube_map_pose (x=%.2f, y=%.2f, z=%.2f)",
+                cube_msg.point.x,
+                cube_msg.point.y,
+                cube_msg.point.z,
+            )
+
+            # Simple RViz marker so detections are visible on the map
+            marker = Marker()
+            marker.header.stamp = rospy.Time.now()
+            marker.header.frame_id = self.target_frame
+            marker.ns = "blue_cubes"
+            # Use a coarse grid ID for stable markers
+            gx = int(cube_msg.point.x * 10.0)
+            gy = int(cube_msg.point.y * 10.0)
+            marker.id = gx + gy * 1000
+            marker.type = Marker.CUBE
+            marker.action = Marker.ADD
+            marker.pose.position = cube_msg.point
+            marker.pose.orientation.w = 1.0
+            marker.scale.x = 0.05
+            marker.scale.y = 0.05
+            marker.scale.z = 0.05
+            if self.target_color == "red":
+                marker.color.r, marker.color.g, marker.color.b = 1.0, 0.0, 0.0
+            else:
+                marker.color.r, marker.color.g, marker.color.b = 0.0, 0.0, 1.0
+            marker.color.a = 1.0
+            marker.lifetime = rospy.Duration(0)
+            self.marker_pub.publish(marker)
+
+        # When grasp is armed, use live camera pose for accuracy
         self.hit_count += 1
         if self.hit_count >= self.require_stable_hits and self.grasp_armed and p_base is not None:
-            rospy.loginfo("STABLE HIT FOUND! Executing Physical Grasp...")
-            self.grasp_armed = False # Reset trigger
-
-            # Map coordinates to Arm Space
+            rospy.loginfo("STABLE HIT: Executing grasp using live camera pose.")
+            self.grasp_armed = False
             x_top, y_top, z_top = p_base
             X_arm = y_top * 1000.0
             Y_arm = -x_top * 1000.0
             Z_arm = z_top * 1000.0
-
             if self.do_grasp(X_arm, Y_arm, Z_arm):
                 self.do_place()
 
@@ -205,19 +257,17 @@ class BlueCubeGrasper:
             return False
 
     def do_place(self):
-        """Rotates the arm to the back and drops the cube on the LIMO tray."""
+        """Move arm to left-side tray (at base of arm, ~5 cm from center) and drop the cube."""
         try:
-            # Note: You may need to tune these joint angles slightly to match your physical tray
-            # Joint 1 (Base) rotated ~180 degrees backwards
-            self.mc.send_angles([90.0, -30.0, -40.0, 80.0, 0.0, 50.0], 40)
-            time.sleep(3.0)
-            
-            # Open gripper to drop
+            # Tray on left of robot, at base of arm: joint1 ~-90° rotates arm to left
+            # Tune first value if your tray is slightly more forward/back
+            self.mc.send_angles([-90.0, -25.0, -50.0, 75.0, 0.0, 50.0], 40)
+            time.sleep(2.5)
+            # Open gripper to drop onto tray
             self.mc.set_gripper_state(0, 80)
             time.sleep(1.0)
-            
-            # Return to standard safe pose facing front
-            self.mc.send_angles([-90.0, 0.0, -10.0, -90.0, 0.0, 57.0], 50)
+            # Return to safe pose facing front
+            self.mc.send_angles([-50.0, 0.0, -10.0, -90.0, 0.0, 57.0], 50)
             time.sleep(2.0)
         except Exception as e:
             rospy.logerr("Place failed: %s", e)
@@ -242,28 +292,6 @@ class BlueCubeGrasper:
         except Exception as e:
             rospy.logwarn_throttle(5.0, f"TF Transform failed: {e}")
             return None
-    def handle_grasp(self, req):
-        rospy.loginfo("Grasp service triggered by LLM!")
-        # Call your existing arm movement logic here
-        self.do_grasp_sequence() 
-        return TriggerResponse(success=True, message="Arm sequence complete")
-    
-    def trigger_grasp_cb(self, req):
-        """
-        Called by the LLM tool fetch_and_store_cube.
-        """
-        rospy.loginfo("Service 'execute_grasp' triggered! Starting arm movement...")
-        
-        if self.last_p_map is None:
-            return TriggerResponse(success=False, message="No cube currently in sight to grasp.")
-
-        # Logic to call your do_grasp() function
-        success = self.execute_physical_grasp() 
-        
-        if success:
-            return TriggerResponse(success=True, message="Cube picked up and placed on left tray.")
-        else:
-            return TriggerResponse(success=False, message="Grasp failed: Robot couldn't reach.")
 
 if __name__ == "__main__":
     BlueCubeGrasper()

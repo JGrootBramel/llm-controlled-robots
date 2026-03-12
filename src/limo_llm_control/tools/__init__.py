@@ -28,7 +28,7 @@ from .perception import (
     update_object_query,
     show_camera_feed
 )
-from .cubes import scan_for_blue_cubes, fetch_and_store_cube
+from .cubes import scan_for_blue_cubes, fetch_and_store_cube, pick_up_cubes_in_area
 
 __all__ = [
     "turn_in_place",
@@ -48,4 +48,5 @@ __all__ = [
     "go_to_map_pose",
     "scan_for_blue_cubes",
     "fetch_and_store_cube",
+    "pick_up_cubes_in_area",
 ]
