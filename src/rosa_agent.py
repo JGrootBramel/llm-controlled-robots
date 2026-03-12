@@ -10,10 +10,26 @@ import limo_llm_control.tools as robot_tools
 load_dotenv()
 os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
 
-# --- TOOLS DYNAMISCH LADEN ---
-# Wir gehen durch alle Namen in der __all__ Liste deiner __init__.py 
-# und holen uns die echten Funktionsobjekte per getattr().
-all_my_tools = [getattr(robot_tools, tool_name) for tool_name in robot_tools.__all__]
+# --- TOOLS DYNAMISCH LADEN + LOGGING FÜR JEDEN AUFRUF ---
+def _wrap_with_tool_logging(tool, name):
+    """Wrap a LangChain tool so every invoke is logged to stdout and ROS."""
+    orig_invoke = tool.invoke
+    def logged_invoke(input, config=None):
+        msg = f"[ROSA TOOL] {name} invoked with input={input!r}"
+        print(msg, flush=True)
+        try:
+            import rospy
+            rospy.loginfo(msg)
+        except Exception:
+            pass
+        return orig_invoke(input, config)
+    tool.invoke = logged_invoke
+    return tool
+
+all_my_tools = []
+for tool_name in robot_tools.__all__:
+    t = getattr(robot_tools, tool_name)
+    all_my_tools.append(_wrap_with_tool_logging(t, tool_name))
 print(f"Lade {len(all_my_tools)} Tools: {robot_tools.__all__}")
 
 

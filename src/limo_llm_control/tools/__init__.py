@@ -15,6 +15,7 @@ from .motion import drive_distance, turn_in_place
 from .navigation import (
     reset_cam_coverage,
     start_cam_coverage_node,
+    start_frontier_planner_node,
     start_straight_planner_node,
     start_mapping_exploration,
     stop_exploration,
@@ -27,7 +28,7 @@ from .perception import (
     update_object_query,
     show_camera_feed
 )
-from .cubes import scan_for_blue_cubes, fetch_and_store_cube
+from .cubes import scan_for_blue_cubes, fetch_and_store_cube, pick_up_cubes_in_area
 
 __all__ = [
     "turn_in_place",
@@ -47,4 +48,5 @@ __all__ = [
     "go_to_map_pose",
     "scan_for_blue_cubes",
     "fetch_and_store_cube",
+    "pick_up_cubes_in_area",
 ]

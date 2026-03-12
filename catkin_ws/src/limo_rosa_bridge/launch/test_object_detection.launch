@@ -20,7 +20,7 @@
   <!-- 4) Navigation stack (move_base) -->
   <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
 
-  <!-- 5) Camera (Astra Pro): 320x200 RGB @ 10 Hz (30 Hz = UVC Invalid mode, node crash, no debug window) -->
+  <!-- 5) Camera (Astra Pro): 320x200 RGB @ 30 Hz -->
   <include file="$(find astra_camera)/launch/astra_pro.launch">
       <arg name="enable_depth" value="true" />
       <arg name="depth_align" value="true" />
@@ -35,13 +35,14 @@
   </include>
   <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" />
 
-  <!-- 6) ROSA autonomy (optional, same as before) -->
+  <!-- 6) ROSA autonomy - exploration + object detection -->
   <include file="$(find limo_rosa_bridge)/launch/autonomy_core.launch">
-    <arg name="use_frontier_planner" value="false" />
+    <arg name="use_frontier_planner" value="true" />
     <arg name="use_straight_planner" value="false" />
   </include>
 
-  <include file="$(find limo_rosa_bridge)/launch/autonomy_perception.launch" />
-  
-  <include file="$(find limo_rosa_bridge)/launch/autonomy_blue_grasp.launch" />
+  <!-- 7) Blue cube detection and grasping (publishes /object_found, /object_pose) -->
+  <include file="$(find limo_rosa_bridge)/launch/autonomy_blue_grasp.launch">
+    <arg name="show_debug_window" value="true" />
+  </include>
 </launch>

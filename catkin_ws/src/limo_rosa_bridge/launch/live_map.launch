@@ -20,16 +20,18 @@
   <!-- 4) Navigation stack (move_base) -->
   <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
 
-  <!-- 5) Camera + rosbridge as before -->
- <include file="$(find astra_camera)/launch/dabai_u3.launch">
+  <!-- 5) Camera (Astra Pro): 320x200 RGB @ 30 Hz -->
+  <include file="$(find astra_camera)/launch/astra_pro.launch">
       <arg name="enable_depth" value="true" />
       <arg name="depth_align" value="true" />
-      
-      <arg name="color_width" value="640" />
-      <arg name="color_height" value="480" />
-      
-      <arg name="depth_width" value="640" />
-      <arg name="depth_height" value="400" />
+
+      <arg name="color_width" value="320" />
+      <arg name="color_height" value="200" />
+      <arg name="color_fps" value="10" />
+
+      <arg name="depth_width" value="320" />
+      <arg name="depth_height" value="200" />
+      <arg name="depth_fps" value="30" />
   </include>
   <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" />
 

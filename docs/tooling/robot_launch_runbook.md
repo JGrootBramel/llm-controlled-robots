@@ -29,19 +29,52 @@ source ~/llm-controlled-robots/venv/bin/activate
 
 ## 2) Launch robot stack
 
-Start full bridge + core autonomy:
+There are two main launch modes on the robot:
+
+### A) Online SLAM + exploration (gmapping)
+
+Start full bridge + core autonomy with live gmapping:
 
 ```bash
 roslaunch limo_rosa_bridge rosa_bridge.launch
 ```
 
-What this should start:
+This should start:
 
 - `limo_bringup` base stack
+- `limo_gmapping.launch` (online SLAM, publishes `/map`)
+- `limo_move_base.launch` (navigation)
+- `astra_pro.launch` (camera)
 - `rosbridge_websocket`
 - `autonomy_core.launch`:
   - `cam_coverage_node.py`
-  - one planner (frontier by default)
+  - one planner (frontier or straight)
+- `autonomy_perception.launch` and optional blue grasp stack
+
+Use this mode when you are **building or extending a map**.
+
+### B) Static map navigation (saved map + AMCL)
+
+After you have saved a map (e.g. `limo_lab_map.yaml` into
+`catkin_ws/src/limo_rosa_bridge/launch/` using `map_saver`),
+you can run navigation on that fixed map:
+
+```bash
+roslaunch limo_rosa_bridge test_map.launch
+```
+
+This should start:
+
+- `limo_bringup` base stack
+- `map_server` with `limo_lab_map.yaml` (static `/map`)
+- `limo_amcl.launch` (localization on the static map, publishes `map -> odom`)
+- `limo_move_base.launch` (navigation)
+- `astra_pro.launch` (camera)
+- `rosbridge_websocket`
+- `autonomy_core.launch`, `autonomy_perception.launch`, `autonomy_blue_grasp.launch`
+
+Use this mode when you want ROSA to **navigate using a prebuilt map**, e.g.
+with the `go_to_map_pose` tool or cube-fetching tools that send map-frame goals.
 
 ## 3) Start ROSA from remote PC
 

@@ -67,30 +67,70 @@ llm-controlled-robots/
 
 ## Robot
 
-cd catkin_ws\
-catkin_make\
+```bash
+cd catkin_ws
+catkin_make
 source devel/setup.bash
+```
 
-roslaunch limo_bringup bringup.launch
+### Online SLAM + mapping (gmapping)
+
+For live mapping with `gmapping` and autonomy tools:
+
+```bash
+roslaunch limo_rosa_bridge rosa_bridge.launch
+```
+
+This starts:
+
+- LIMO base drivers (`limo_start.launch`)
+- `limo_gmapping.launch` (online SLAM, publishes `/map`)
+- `limo_move_base.launch` (navigation)
+- Camera + rosbridge
+- Core autonomy nodes (`autonomy_core.launch`, `autonomy_perception.launch`)
+
+### Static map navigation (saved map + AMCL)
+
+After you have built and saved a map (e.g. `limo_lab_map.yaml` in `limo_rosa_bridge/launch`),
+you can restart the robot using the static map navigation launch:
+
+```bash
+roslaunch limo_rosa_bridge test_map.launch
+```
+
+This starts:
+
+- LIMO base drivers
+- `map_server` with your saved map
+- `limo_amcl.launch` (localization on the static map)
+- `limo_move_base.launch` (navigation)
+- Camera + rosbridge + autonomy tools
 
 ------------------------------------------------------------------------
 
 ## Remote
 
-cd src\
-python3.9 -m venv venv\
-source venv/bin/activate\
-pip install -r requirements.txt
+```bash
+cd ~/llm-controlled-robots
+python3.9 -m venv venv
+source venv/bin/activate
+pip install -r requirements-remote.txt
+```
 
-Configure .env:
+Configure `.env` in the repo root:
 
-OPENAI_API_KEY=your_key\
-ROS_MASTER_URI=http://`<robot_ip>`{=html}:11311\
-ROS_IP=`<remote_pc_ip>`{=html}
+```bash
+OPENAI_API_KEY=your_key
+ROS_MASTER_URI=http://<robot_ip>:11311
+ROS_IP=<remote_pc_ip>
+```
 
-Run:
+Run the ROSA LIMO agent (robot profile):
 
-python -m limo_llm_control.main --profile robot
+```bash
+cd ~/llm-controlled-robots
+python src/launch_rosa.py
+```
 
 ------------------------------------------------------------------------
 

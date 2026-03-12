@@ -712,19 +712,21 @@ class ObjectFinder:
         marker.header.frame_id = self.target_frame
         marker.header.stamp = rospy.Time.now()
         marker.ns = "blue_cubes"
-        
-        # Use a simple grid-based ID to keep markers persistent
-        # This rounds to 10cm chunks so we don't spam 100 markers for 1 cube
-        grid_x = int(p_map[0] * 10)
-        grid_y = int(p_map[1] * 10)
+
+        # Use the PointStamped coordinates (10 cm grid) to form a stable ID
+        x = float(p_map.point.x)
+        y = float(p_map.point.y)
+        z = float(p_map.point.z)
+        grid_x = int(x * 10.0)
+        grid_y = int(y * 10.0)
         marker.id = grid_x + (grid_y * 1000)
-        
+
         marker.type = Marker.CUBE
         marker.action = Marker.ADD  # Explicitly tell RViz to ADD/KEEP
-        
-        marker.pose.position.x = p_map[0]
-        marker.pose.position.y = p_map[1]
-        marker.pose.position.z = p_map[2]
+
+        marker.pose.position.x = x
+        marker.pose.position.y = y
+        marker.pose.position.z = z
         marker.pose.orientation.w = 1.0 
         
         marker.scale.x = 0.05
@@ -736,7 +738,7 @@ class ObjectFinder:
         # 0 means the marker stays forever until you restart RViz
         marker.lifetime = rospy.Duration(0) 
         
-        self.marker_pub.publish(marker)
+        self.pub_marker.publish(marker)
 
     def _update_detection_state(self, rgb_msg, depth_msg, info_msg,
                             x1, y1, x2, y2, u, v, Z, p_base, p_map):
