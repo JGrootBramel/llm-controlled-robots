@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-# One-shot: SSH to robot, fetch/pull current branch, start test_map.launch in background,
+# One-shot: SSH to robot, fetch/pull current branch, start test_map.launch (background or in a new terminal),
 # then on this PC source env and start ROSA remote (launch_rosa.py).
 # See docs/tooling/robot_launch_runbook.md.
 
@@ -27,7 +27,8 @@ usage() {
 Usage: ./sync_robot_and_start_remote.sh
 
 Syncs the current git branch on the robot, starts roslaunch limo_rosa_bridge test_map.launch
-on the robot in the background, then starts the ROSA remote (python src/launch_rosa.py) on this PC.
+on the robot (in a new terminal window when possible, otherwise in the background), then
+starts the ROSA remote (python src/launch_rosa.py) in this terminal.
 
 Required environment:
   LIMO_ROBOT_HOST    Robot hostname or IP (e.g. 192.168.0.151 or robot.local)
@@ -85,10 +86,38 @@ echo "=================================================="
 echo "[1/4] Fetch and pull on robot..."
 ssh "${SSH_OPTS[@]}" "${SSH_TARGET}" "cd ${ROBOT_WORKDIR} && git fetch && git checkout ${BRANCH} && git pull"
 
-echo "[2/4] Starting test_map.launch on robot (background)..."
-ssh "${SSH_OPTS[@]}" "${SSH_TARGET}" "cd ${ROBOT_WORKDIR} && nohup bash -c 'source /opt/ros/noetic/setup.bash && source catkin_ws/devel/setup.bash && roslaunch limo_rosa_bridge test_map.launch' > ${ROBOT_LAUNCH_LOG} 2>&1 &"
-echo "      Robot launch log: ${ROBOT_WORKDIR}/${ROBOT_LAUNCH_LOG}"
-echo "      To stop later: SSH to robot and kill the roslaunch process (or run 'Stop all autonomy nodes' from ROSA)."
+echo "[2/4] Opening new terminal window for robot (test_map.launch)..."
+ROBOT_REMOTE_CMD="cd ${ROBOT_WORKDIR} && source /opt/ros/noetic/setup.bash && source catkin_ws/devel/setup.bash && roslaunch limo_rosa_bridge test_map.launch"
+TMP_SCRIPT="$(mktemp --suffix=.sh)"
+trap 'rm -f "$TMP_SCRIPT"' EXIT
+{
+  echo "#!/bin/bash"
+  echo "set -e"
+  echo "echo 'SSH to robot and starting test_map.launch...'"
+  printf 'ssh '
+  printf '%s ' "${SSH_OPTS[@]}"
+  echo "\"${SSH_TARGET}\" \"${ROBOT_REMOTE_CMD}\""
+  echo "echo ''"
+  echo "read -p 'Press Enter to close this window...'"
+} > "$TMP_SCRIPT"
+chmod +x "$TMP_SCRIPT"
+
+if command -v gnome-terminal &>/dev/null; then
+  gnome-terminal --title "Robot: test_map.launch" -- bash -c "\"$TMP_SCRIPT\"; exec bash"
+elif command -v xfce4-terminal &>/dev/null; then
+  xfce4-terminal --title "Robot: test_map.launch" -e "bash -c '\"$TMP_SCRIPT\"; exec bash'"
+elif command -v konsole &>/dev/null; then
+  konsole --hold -e bash -c "\"$TMP_SCRIPT\"; exec bash"
+elif command -v xterm &>/dev/null; then
+  xterm -T "Robot: test_map.launch" -e "bash -c '\"$TMP_SCRIPT\"; exec bash'"
+else
+  echo "Error: No supported terminal found (gnome-terminal, xfce4-terminal, konsole, xterm)." >&2
+  echo "Falling back to background launch." >&2
+  rm -f "$TMP_SCRIPT"
+  trap - EXIT
+  ssh "${SSH_OPTS[@]}" "${SSH_TARGET}" "cd ${ROBOT_WORKDIR} && nohup bash -c 'source /opt/ros/noetic/setup.bash && source catkin_ws/devel/setup.bash && roslaunch limo_rosa_bridge test_map.launch' > ${ROBOT_LAUNCH_LOG} 2>&1 &"
+fi
+echo "      Robot terminal opened (or background launch). This terminal will start the ROSA remote next."
 
 echo "[3/4] Waiting for robot roscore (up to ${ROSCORE_WAIT_MAX}s)..."
 if [[ ! -f "${ROS_SETUP}" ]]; then

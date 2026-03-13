@@ -4,8 +4,13 @@ from geometry_msgs.msg import Twist, PointStamped
 from std_srvs.srv import Trigger
 from langchain.tools import tool
 from tf.transformations import euler_from_quaternion
-import tf2_ros
-import tf2_geometry_msgs
+
+try:
+    import tf2_ros
+    import tf2_geometry_msgs
+except Exception:  # pragma: no cover - allows remote PC without ROS tf2/PyKDL
+    tf2_ros = None
+    tf2_geometry_msgs = None
 
 from ..ros_clients import ensure_rospy
 
@@ -192,6 +197,11 @@ def fetch_and_store_cube(cube_x: float, cube_y: float) -> str:
     Approach one cube at map (cube_x, cube_y): orient toward it, drive to sweet spot, then grasp and place on tray.
     You can use this with coordinates from a prior scan or given by the user.
     """
+    if tf2_ros is None or tf2_geometry_msgs is None:
+        return (
+            "This tool requires ROS tf2 (tf2_ros, tf2_geometry_msgs, PyKDL) "
+            "and must be run on the robot ROS environment."
+        )
     ensure_rospy()
     tfbuf = tf2_ros.Buffer(rospy.Duration(10.0))
     tf2_ros.TransformListener(tfbuf)
@@ -207,6 +217,11 @@ def pick_up_cubes_in_area(duration_seconds: int = 15, spin: bool = True) -> str:
     Scan for cubes, then collect them one by one: for each cube, orient toward it, drive to sweet spot, grasp and place on tray.
     Say e.g. 'Pick up the cubes in the area' to run this. Cubes closer than 5 cm are merged into one.
     """
+    if tf2_ros is None or tf2_geometry_msgs is None:
+        return (
+            "This tool requires ROS tf2 (tf2_ros, tf2_geometry_msgs, PyKDL) "
+            "and must be run on the robot ROS environment."
+        )
     merged = _run_scan(float(duration_seconds), spin, merge_distance_m=0.05)
     if not merged:
         return "Scan complete. No cubes detected; nothing to pick up."

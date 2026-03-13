@@ -97,17 +97,19 @@ Make sure ROS networking points to robot ROS master (`ROS_MASTER_URI`) and remot
 
 ### One-shot: sync robot branch + launch robot + start remote
 
-From your **remote PC** you can run a single script that SSHs to the robot, fetches and pulls the **current git branch**, starts `test_map.launch` on the robot in the background, waits for roscore, then starts the ROSA remote on this PC:
+From your **remote PC** you can run a single script that SSHs to the robot, fetches and pulls the **current git branch**, starts `test_map.launch` on the robot (in a new terminal window when possible), waits for roscore, then starts the ROSA remote on this PC:
 
 ```bash
 export LIMO_ROBOT_HOST=192.168.0.105   # or your robot hostname/IP
 ./sync_robot_and_start_remote.sh
 ```
 
+The script tries to open a second terminal window for the robot SSH session (supported: `gnome-terminal`, `xfce4-terminal`, `konsole`, `xterm`) so you can see robot and remote output side by side. If no supported terminal is found, it falls back to launching `test_map.launch` in the background on the robot.
+
 - **Required:** `LIMO_ROBOT_HOST` (robot hostname or IP).
 - **Optional** (same as ROSA tools): `LIMO_ROBOT_USER` (default `agilex`), `LIMO_ROBOT_PORT`, `LIMO_ROBOT_WORKDIR` (default `~/llm-controlled-robots`).
 
-The script lives at the repo root: [sync_robot_and_start_remote.sh](../../sync_robot_and_start_remote.sh). Robot launch runs in the background on the robot; to stop it, SSH to the robot and kill the roslaunch process, or use "Stop all autonomy nodes" from ROSA.
+The script lives at the repo root: [sync_robot_and_start_remote.sh](../../sync_robot_and_start_remote.sh). To stop the robot launch, use Ctrl+C in the robot terminal window, SSH to the robot and kill the roslaunch process, or use "Stop all autonomy nodes" from ROSA.
 
 ## 4) ROSA validation sequence
 
