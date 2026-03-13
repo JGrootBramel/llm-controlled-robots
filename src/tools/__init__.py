@@ -21,6 +21,7 @@ from limo_llm_control.tools import (
     update_object_query,
     scan_for_blue_cubes,
     fetch_and_store_cube,
+    pick_up_cubes_in_area,
 )
 
 __all__ = [
@@ -37,4 +38,5 @@ __all__ = [
     "get_autonomy_status",
     "scan_for_blue_cubes",
     "fetch_and_store_cube",
+    "pick_up_cubes_in_area",
 ]
