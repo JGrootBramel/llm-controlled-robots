@@ -20,10 +20,11 @@
   <!-- 4) Navigation stack (move_base) -->
   <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
 
-  <!-- 5) Camera (Astra Pro): 320x200 RGB @ 10 Hz (30 Hz = UVC Invalid mode, node crash, no debug window) -->
+  <!-- 5) Camera (Astra Pro): 320x200 RGB @ 10 Hz -->
   <include file="$(find astra_camera)/launch/astra_pro.launch">
       <arg name="enable_depth" value="true" />
-      <arg name="depth_align" value="true" />
+      <arg name="depth_align" value="false" />
+      <arg name="enable_ir" value="false" />
 
       <arg name="color_width" value="320" />
       <arg name="color_height" value="200" />
@@ -31,7 +32,8 @@
 
       <arg name="depth_width" value="320" />
       <arg name="depth_height" value="200" />
-      <arg name="depth_fps" value="30" />
+      <arg name="depth_fps" value="10" />
+      <arg name="uvc_camera_format" value="RGB888" />
   </include>
   <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" />
 
