@@ -12,18 +12,38 @@ os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
 
 # --- TOOLS DYNAMISCH LADEN + LOGGING FÜR JEDEN AUFRUF ---
 def _wrap_with_tool_logging(tool, name):
-    """Wrap a LangChain tool so every invoke is logged to stdout and ROS."""
-    orig_invoke = tool.invoke
-    def logged_invoke(input, config=None):
-        msg = f"[ROSA TOOL] {name} invoked with input={input!r}"
+    """Wrap a LangChain StructuredTool so each call is logged (Pydantic tools forbid assigning .invoke)."""
+    orig_func = getattr(tool, "func", None)
+    orig_coro = getattr(tool, "coroutine", None)
+
+    def _log(payload_repr: str) -> None:
+        msg = f"[ROSA TOOL] {name} invoked with input={payload_repr}"
         print(msg, flush=True)
         try:
             import rospy
+
             rospy.loginfo(msg)
         except Exception:
             pass
-        return orig_invoke(input, config)
-    tool.invoke = logged_invoke
+
+    if orig_func is not None:
+
+        def logged_func(*args, **kwargs):
+            payload = kwargs if kwargs else args
+            _log(repr(payload))
+            return orig_func(*args, **kwargs)
+
+        return tool.model_copy(update={"func": logged_func})
+
+    if orig_coro is not None:
+
+        async def logged_coro(*args, **kwargs):
+            payload = kwargs if kwargs else args
+            _log(repr(payload))
+            return await orig_coro(*args, **kwargs)
+
+        return tool.model_copy(update={"coroutine": logged_coro})
+
     return tool
 
 all_my_tools = []

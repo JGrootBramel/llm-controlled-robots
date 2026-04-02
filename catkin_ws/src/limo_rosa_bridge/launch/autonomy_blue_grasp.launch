@@ -8,6 +8,8 @@
   <arg name="base_frame" default="base_link" />
   <!-- red or blue (red often better in blue-tinted rooms) -->
   <arg name="target_color" default="red" />
+  <!-- Prefer depth *registered to color* (same WxH as /camera/color) when the driver exposes it -->
+  <arg name="depth_topic" default="/camera/depth/image_raw" />
 
   <node pkg="limo_rosa_bridge" type="pick_cube_blue_node.py" name="blue_cube_grasper" output="screen">
     <param name="stable_hits" value="$(arg stable_hits)" />
@@ -16,5 +18,6 @@
     <param name="min_area_px" value="$(arg min_area_px)" />
     <param name="base_frame" value="$(arg base_frame)" />
     <param name="target_color" value="$(arg target_color)" />
+    <param name="depth_topic" value="$(arg depth_topic)" />
   </node>
 </launch>

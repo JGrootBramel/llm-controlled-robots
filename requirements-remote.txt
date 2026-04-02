@@ -1,5 +1,12 @@
 # Remote PC venv (LLM + orchestration).
 # ROS packages are intentionally excluded (installed via system ROS where needed).
+#
+# Map-frame cube tools need tf2_ros in the *same* Python as rospy (Noetic).
+#   sudo apt install ros-noetic-tf2-ros
+# No PyKDL on the LLM PC — transforms are implemented in limo_llm_control/tools/cubes.py.
+# Create venv WITH system site-packages so ROS Ubuntu packages are visible:
+#   python3 -m venv venv --system-site-packages
+# Run the agent with ROS sourced (see scripts/run_rosa_with_ros.sh).
 
 langchain
 langchain-openai
