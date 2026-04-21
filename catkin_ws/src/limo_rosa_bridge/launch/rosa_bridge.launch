@@ -10,12 +10,12 @@
       <arg name="enable_depth" value="true" />
       <arg name="depth_align" value="true" />
 
-      <arg name="color_width" value="320" />
-      <arg name="color_height" value="200" />
-      <arg name="color_fps" value="10" />
+      <arg name="color_width" value="640" />
+      <arg name="color_height" value="400" />
+      <arg name="color_fps" value="30" />
 
-      <arg name="depth_width" value="320" />
-      <arg name="depth_height" value="200" />
+      <arg name="depth_width" value="640" />
+      <arg name="depth_height" value="400" />
       <arg name="depth_fps" value="30" />
     </include>
 
