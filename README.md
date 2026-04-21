@@ -132,6 +132,32 @@ cd ~/llm-controlled-robots
 python src/launch_rosa.py
 ```
 
+### Sync code to robot over SSH (offline robot)
+
+If the robot has no internet but is reachable on your private network, use:
+
+```bash
+cd ~/llm-controlled-robots
+./sync_git_main_to_robot.sh
+```
+
+This script is preconfigured for:
+
+- Robot user: `agilex`
+- Robot IP: `192.168.0.105`
+- Branch: `main`
+
+What it does:
+
+1. Pushes your local `main` branch to the robot repo over SSH.
+2. SSHes to the robot and updates the working tree to `main`.
+
+Prerequisites:
+
+- SSH key auth to robot is already set up.
+- The robot has this repo at `/home/agilex/llm-controlled-robots`.
+- Your local changes are committed before running the script.
+
 ------------------------------------------------------------------------
 
 ## Simulation
