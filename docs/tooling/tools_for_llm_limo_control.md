@@ -1,10 +1,62 @@
-## Tools for LLM-Based Limo Cobot Control
+# Tools for LLM-Based LIMO Cobot Control
 
-- **ROSA core tools**: High-level task APIs, action clients/servers, and robot capability abstractions used by the LLM to issue semantically rich commands (e.g., navigation, arm control, perception queries).
-- **Perception / object finding**: RGB-D or stereo camera drivers, object detection/segmentation models (e.g., YOLO/Mask R-CNN wrappers), 3D pose estimation, and scene understanding services exposed as ROSA tools for "find object X" or "pick nearest graspable object".
-- **Navigation and localization**: Mapping and localization stack (e.g., SLAM, AMCL), path planning, obstacle avoidance, and waypoint management tools that let the LLM request motion like "go to the table" or "navigate to pose (x, y, θ)".
-- **Manipulation and grasping**: Motion planning (MoveIt or equivalent), grasp synthesis, IK/trajectory generation, and gripper control tools for "pick", "place", and "handover" primitives.
-- **World and task memory**: A lightweight world model / blackboard service, key–value memory, and task history logging so the LLM can track object locations, goals, and intermediate states across turns.
-- **Safety and supervision**: Safety checkers (joint/velocity limits, collision checks), emergency stop and pause/resume tools, human-in-the-loop approval hooks, and sandbox/simulation tools for dry‑running plans.
-- **Debugging and monitoring**: Telemetry streaming (joint states, battery, diagnostics), log and replay tools, visualization hooks (e.g., RViz-like views or web dashboards), and scripted test scenarios for validating LLM behaviors.
+This document summarizes the ROSA-facing tool APIs in `src/limo_llm_control/tools/`
+with focus on perception/scanning workflows.
 
+## Perception and Item Discovery
+
+### Object-query workflow (generic items)
+
+- `start_object_finder_node(prompt=...)`
+  - Starts OWL-ViT based object finder and publishes detections to `/object_pose`.
+  - Use this for semantic categories such as bottles, pens, or cups.
+
+- `update_object_query(query=...)`
+  - Updates target object at runtime via `/object_query` without restarting detector.
+
+- `scan_for_items(item_query="a bottle", source="object_pose", duration_seconds=25, spin=True, merge_distance_m=0.08)`
+  - Generic scan API for extensible item types.
+  - If `source="object_pose"`, the tool updates `/object_query` using `item_query`.
+  - Deduplicates nearby detections and returns merged map coordinates.
+
+### Color-cube workflow (HSV)
+
+- `start_color_cube_grasper_node(target_color="red", ...)`
+  - Starts HSV-based cube detector/grasper with configurable color presets.
+  - Presets:
+    - `red` -> `H=[0,15]`
+    - `blue` -> `H=[95,135]`
+    - `green` -> `H=[40,90]`
+  - Optional overrides: `h_low`, `h_high`, `s_low`, `v_low`.
+
+- `scan_for_red_cubes(duration_seconds=25, spin=True)`
+  - Convenience wrapper to scan red cubes from `/blue_cube_grasper/cube_map_pose`.
+
+- `scan_for_blue_cubes(duration_seconds=25, spin=True)`
+  - Legacy-compatible cube scan wrapper using same scan backend.
+
+## Recommended Usage Patterns
+
+### Find all red cubes in a room
+
+1. Start color detector:
+   - `start_color_cube_grasper_node(target_color="red")`
+2. Scan while rotating:
+   - `scan_for_red_cubes(duration_seconds=30, spin=True)`
+
+### Find all bottles (or pens) in a room
+
+1. Start generic detector:
+   - `start_object_finder_node(prompt="a bottle")`
+2. Run generic scan:
+   - `scan_for_items(item_query="a bottle", source="object_pose", duration_seconds=30, spin=True)`
+
+For pens, only change query string to `"a pen"` (or `"a black pen"`).
+
+## Design Notes for Extensibility
+
+- `scan_for_items(...)` is the preferred entrypoint for future classes of objects.
+- The scan backend supports both:
+  - `PointStamped` sources (e.g., cube pose topic)
+  - `PoseStamped` sources (e.g., object pose topic)
+- New detectors can be integrated by publishing to a compatible pose topic and reusing the same scan tool.

@@ -14,7 +14,7 @@ import re
 from typing import List, Optional, Tuple
 
 import rospy
-from geometry_msgs.msg import Twist, PointStamped
+from geometry_msgs.msg import Twist, PointStamped, PoseStamped
 from std_srvs.srv import Trigger
 from langchain.tools import tool
 from tf.transformations import euler_from_quaternion
@@ -26,6 +26,7 @@ except Exception as _e:  # pragma: no cover
     tf2_ros = None
     _TF2_IMPORT_ERROR = f"{type(_e).__name__}: {_e}"
 
+from .perception import update_object_query
 from ..ros_clients import ensure_rospy
 
 # ---------------------------------------------------------------------------
@@ -69,6 +70,7 @@ VISION_POSE_MAX_AGE_S: float = 0.42
 
 _GRASP_SRV = "/blue_cube_grasper/execute_grasp"
 _CUBE_POSE_TOPIC = "/blue_cube_grasper/cube_map_pose"
+_OBJECT_POSE_TOPIC = "/object_pose"
 
 
 def _tf2_ready() -> bool:
@@ -141,22 +143,44 @@ def _point_stamped_to_base_link(msg: PointStamped, trans_stamped) -> Tuple[float
     )
 
 
-def _run_scan(duration_seconds: float, spin: bool, merge_distance_m: float = 0.05):
-    """Run cube scan, return merged list of (x, y) map coordinates."""
+def _run_scan(
+    duration_seconds: float,
+    spin: bool,
+    pose_topic: str = _CUBE_POSE_TOPIC,
+    source_type: str = "point",
+    merge_distance_m: float = 0.05,
+    min_range_m: float = 0.2,
+    max_range_m: float = 1.5,
+    lateral_limit_m: float = 0.5,
+    round_precision: int = 1,
+):
+    """Run a generic item scan and return merged list of (x, y) map coordinates."""
     cmd_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
-    found_cubes = set()
+    found_points = set()
 
-    def cube_cb(msg: PointStamped):
-        x, y = msg.point.x, msg.point.y
+    def _add_if_valid(x: float, y: float):
         r = (x * x + y * y) ** 0.5
-        if r < 0.2 or r > 1.5:
+        if r < min_range_m or r > max_range_m:
             return
-        if abs(y) > 0.5:
+        if abs(y) > lateral_limit_m:
             return
-        gx, gy = round(x, 1), round(y, 1)
-        found_cubes.add((gx, gy))
+        gx, gy = round(x, round_precision), round(y, round_precision)
+        found_points.add((gx, gy))
 
-    sub = rospy.Subscriber(_CUBE_POSE_TOPIC, PointStamped, cube_cb)
+    def point_cb(msg: PointStamped):
+        _add_if_valid(msg.point.x, msg.point.y)
+
+    def pose_cb(msg: PoseStamped):
+        _add_if_valid(msg.pose.position.x, msg.pose.position.y)
+
+    source_key = source_type.strip().lower()
+    if source_key == "point":
+        sub = rospy.Subscriber(pose_topic, PointStamped, point_cb)
+    elif source_key == "pose":
+        sub = rospy.Subscriber(pose_topic, PoseStamped, pose_cb)
+    else:
+        raise ValueError("source_type must be 'point' or 'pose'.")
+
     tw = Twist()
     if spin:
         tw.angular.z = 0.2
@@ -171,7 +195,7 @@ def _run_scan(duration_seconds: float, spin: bool, merge_distance_m: float = 0.0
     sub.unregister()
 
     merged = []
-    for (x, y) in sorted(found_cubes):
+    for (x, y) in sorted(found_points):
         if not merged:
             merged.append((x, y))
             continue
@@ -179,6 +203,15 @@ def _run_scan(duration_seconds: float, spin: bool, merge_distance_m: float = 0.0
         if d_min >= merge_distance_m:
             merged.append((x, y))
     return merged
+
+
+def _format_scan_result(item_name_plural: str, merged: List[Tuple[float, float]]) -> str:
+    if not merged:
+        return f"Scan complete. No {item_name_plural} detected."
+    result = f"Scan complete. Found {item_name_plural} at the following map coordinates:\n"
+    for idx, (x, y) in enumerate(merged):
+        result += f"- Item {idx + 1}: x={x}, y={y}\n"
+    return result
 
 
 def _wrap_pi(angle: float) -> float:
@@ -371,13 +404,74 @@ def scan_for_blue_cubes(duration_seconds: int = 25, spin: bool = True) -> str:
     Scan for colored cubes (HSV on robot: see blue_cube_grasper target_color, often red).
     Optionally spin the base. Returns merged map (x, y) coordinates from /blue_cube_grasper/cube_map_pose.
     """
-    merged = _run_scan(float(duration_seconds), spin, merge_distance_m=0.05)
-    if not merged:
-        return "Scan complete. No cubes detected."
-    result = "Scan complete. Found cubes at the following map coordinates:\n"
-    for idx, (x, y) in enumerate(merged):
-        result += f"- Cube {idx + 1}: x={x}, y={y}\n"
-    return result
+    merged = _run_scan(
+        duration_seconds=float(duration_seconds),
+        spin=spin,
+        pose_topic=_CUBE_POSE_TOPIC,
+        source_type="point",
+        merge_distance_m=0.05,
+    )
+    return _format_scan_result("cubes", merged)
+
+
+@tool
+def scan_for_red_cubes(duration_seconds: int = 25, spin: bool = True) -> str:
+    """
+    Convenience wrapper for scanning red cubes from /blue_cube_grasper/cube_map_pose.
+    Use this after configuring the cube grasper for red HSV thresholds.
+    """
+    merged = _run_scan(
+        duration_seconds=float(duration_seconds),
+        spin=spin,
+        pose_topic=_CUBE_POSE_TOPIC,
+        source_type="point",
+        merge_distance_m=0.05,
+    )
+    return _format_scan_result("red cubes", merged)
+
+
+@tool
+def scan_for_items(
+    item_query: str = "a bottle",
+    duration_seconds: int = 25,
+    spin: bool = True,
+    source: str = "object_pose",
+    merge_distance_m: float = 0.08,
+) -> str:
+    """
+    Generic scanner for extensible item types (pens, bottles, cubes, etc.).
+
+    Args:
+        item_query: Query published to /object_query when using source='object_pose'.
+        duration_seconds: Scan duration in seconds.
+        spin: Rotate in place during scan.
+        source: Data source type. One of:
+            - 'cube_pose': /blue_cube_grasper/cube_map_pose (PointStamped)
+            - 'object_pose': /object_pose (PoseStamped)
+        merge_distance_m: Dedup radius for merged map points.
+    """
+    src = source.strip().lower()
+    if src == "cube_pose":
+        pose_topic = _CUBE_POSE_TOPIC
+        source_type = "point"
+        item_name_plural = "items"
+    elif src == "object_pose":
+        pose_topic = _OBJECT_POSE_TOPIC
+        source_type = "pose"
+        item_name_plural = item_query.strip() or "items"
+        if item_query.strip():
+            update_object_query(item_query)
+    else:
+        return "Invalid source. Use 'cube_pose' or 'object_pose'."
+
+    merged = _run_scan(
+        duration_seconds=float(duration_seconds),
+        spin=spin,
+        pose_topic=pose_topic,
+        source_type=source_type,
+        merge_distance_m=max(0.01, float(merge_distance_m)),
+    )
+    return _format_scan_result(item_name_plural, merged)
 
 
 def _start_approach_session():

@@ -89,6 +89,16 @@ Get autonomy status.
 Stop all autonomy nodes.
 ```
 
+## Quick test prompt set (new flexible scanning)
+
+```text
+Start color cube grasper with target color "red".
+Scan for red cubes for 30 seconds while spinning.
+Start object finder with prompt "a bottle".
+Scan for items using query "a bottle" from source "object_pose" for 30 seconds while spinning.
+Stop all autonomy nodes.
+```
+
 ## Notes
 
 - Keep tests incremental. Start with discovery, then smoke tests, then integration.

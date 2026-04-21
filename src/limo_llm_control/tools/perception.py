@@ -129,6 +129,70 @@ def start_blue_cube_grasper_node(
 
 
 @tool
+def start_color_cube_grasper_node(
+    target_color: str = "red",
+    stable_hits: int = 3,
+    depth_min: float = 0.10,
+    depth_max: float = 2.50,
+    min_area_px: int = 900,
+    base_frame: str = "base_link",
+    show_debug_window: bool = True,
+    h_low: int = -1,
+    h_high: int = -1,
+    s_low: int = 50,
+    v_low: int = 40,
+) -> str:
+    """
+    Start cube grasper with configurable HSV thresholds.
+
+    If h_low/h_high are not provided (negative), a color preset is used:
+    - red:   H in [0, 15] (single interval)
+    - blue:  H in [95, 135]
+    - green: H in [40, 90]
+    """
+    color = target_color.strip().lower()
+    presets = {
+        "red": (0, 15),
+        "blue": (95, 135),
+        "green": (40, 90),
+    }
+    if h_low < 0 or h_high < 0:
+        if color not in presets:
+            return "Unknown target_color. Use red/blue/green or provide explicit h_low/h_high."
+        h_low, h_high = presets[color]
+
+    e1 = runner.validate_int("stable_hits", stable_hits, 1, 100)
+    e2 = runner.validate_float("depth_min", depth_min, 0.05, 5.0)
+    e3 = runner.validate_float("depth_max", depth_max, 0.1, 10.0)
+    e4 = runner.validate_int("min_area_px", min_area_px, 10, 500000)
+    e5 = runner.validate_int("h_low", h_low, 0, 179)
+    e6 = runner.validate_int("h_high", h_high, 0, 179)
+    e7 = runner.validate_int("s_low", s_low, 0, 255)
+    e8 = runner.validate_int("v_low", v_low, 0, 255)
+    for err in (e1, e2, e3, e4, e5, e6, e7, e8):
+        if err:
+            return err
+    if float(depth_max) <= float(depth_min):
+        return "Invalid depth bounds: depth_max must be greater than depth_min."
+    if int(h_high) < int(h_low):
+        return "Invalid HSV bounds: h_high must be >= h_low."
+
+    params = {
+        "stable_hits": int(stable_hits),
+        "depth_min": float(depth_min),
+        "depth_max": float(depth_max),
+        "min_area_px": int(min_area_px),
+        "base_frame": base_frame.strip(),
+        "show_debug_window": bool(show_debug_window),
+        "h_low": int(h_low),
+        "h_high": int(h_high),
+        "s_low": int(s_low),
+        "v_low": int(v_low),
+    }
+    return runner.spawn_node("blue_cube_grasper", params)
+
+
+@tool
 def show_camera_feed() -> str:
     """
     Starts a visual camera feed window on the PC using rqt_image_view.

@@ -24,12 +24,15 @@ from .navigation import (
 )
 from .perception import (
     start_blue_cube_grasper_node,
+    start_color_cube_grasper_node,
     start_object_finder_node,
     update_object_query,
     show_camera_feed
 )
 from .cubes import (
     scan_for_blue_cubes,
+    scan_for_red_cubes,
+    scan_for_items,
     fetch_and_store_cube,
     pick_up_cubes_in_area,
     pick_up_cubes_at_map_positions,
@@ -44,6 +47,7 @@ __all__ = [
     "start_object_finder_node",
     "update_object_query",
     "start_blue_cube_grasper_node",
+    "start_color_cube_grasper_node",
     "stop_autonomy_nodes",
     "get_autonomy_status",
     "start_mapping_exploration",
@@ -52,6 +56,8 @@ __all__ = [
     "stop_exploration",
     "go_to_map_pose",
     "scan_for_blue_cubes",
+    "scan_for_red_cubes",
+    "scan_for_items",
     "fetch_and_store_cube",
     "pick_up_cubes_in_area",
     "pick_up_cubes_at_map_positions",
