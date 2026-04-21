@@ -216,23 +216,44 @@ class BlueCubeGrasper:
         if not cnts:
             rospy.logdebug_throttle(1.0, "blue_cube_grasper: no color contour for target=%s", self.target_color)
             return None
-        best_cnt = max(cnts, key=cv2.contourArea)
-        best_area = float(cv2.contourArea(best_cnt))
-        if best_area < self.min_area_px:
-            rospy.loginfo_throttle(
-                1.0,
-                "blue_cube_grasper: contour too small area=%.1f (< min_area_px=%d)",
-                best_area,
-                self.min_area_px,
-            )
-            return None
-        if best_area > self.max_area_px:
-            rospy.loginfo_throttle(
-                1.0,
-                "blue_cube_grasper: contour too large area=%.1f (> max_area_px=%d)",
-                best_area,
-                self.max_area_px,
-            )
+
+        # Prefer the largest contour that falls into [min_area_px, max_area_px].
+        # This avoids rejecting frames where a huge red background region exists
+        # but a valid cube contour is also present.
+        sorted_cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
+        best_cnt = None
+        best_area = 0.0
+        too_large_area = None
+        too_small_area = None
+        for c in sorted_cnts:
+            a = float(cv2.contourArea(c))
+            if a > self.max_area_px:
+                if too_large_area is None:
+                    too_large_area = a
+                continue
+            if a < self.min_area_px:
+                if too_small_area is None:
+                    too_small_area = a
+                continue
+            best_cnt = c
+            best_area = a
+            break
+
+        if best_cnt is None:
+            if too_large_area is not None:
+                rospy.loginfo_throttle(
+                    1.0,
+                    "blue_cube_grasper: all candidate contours too large (largest=%.1f, max_area_px=%d)",
+                    too_large_area,
+                    self.max_area_px,
+                )
+            elif too_small_area is not None:
+                rospy.loginfo_throttle(
+                    1.0,
+                    "blue_cube_grasper: all candidate contours too small (largest small=%.1f, min_area_px=%d)",
+                    too_small_area,
+                    self.min_area_px,
+                )
             return None
         M = cv2.moments(best_cnt)
         u, v = int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])
