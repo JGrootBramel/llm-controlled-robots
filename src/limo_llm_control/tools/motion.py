@@ -69,48 +69,53 @@ def _publish_twist_for(cmd: Twist, duration_s: float, rate_hz: float = 10.0) -> 
     _CMD_VEL_PUB.publish(stop)
 
 
-def _turn_with_verification(
-    cmd: Twist,
+def _measure_rotation_unwrapped(
     target_angle_rad: Optional[float],
-    direction: str,
-    angular_speed: float,
+    tolerance_rad: float,
+    frame_id: str,
+    base_frame: str,
     max_duration_s: float,
-    tolerance_rad: float = 0.05,
-    frame_id: str = "map",
-    base_frame: str = "base_link",
-) -> tuple:
+    cmd: Twist,
+    sample_hz: float = 20.0,
+) -> tuple[float, float, bool]:
+    """
+    Measure rotation by integrating incremental yaw deltas (wrap-safe).
+
+    Returns:
+        (actual_rotation_rad, requested_rotation_rad, reached_target)
+    """
     _ensure_pub_and_tf()
     assert _CMD_VEL_PUB is not None
     initial_yaw = _get_robot_yaw(frame_id, base_frame)
     if initial_yaw is None:
-        rospy.logwarn("[turn_in_place] TF unavailable, using duration-based turn")
-        _publish_twist_for(cmd, max_duration_s)
-        requested_rad = angular_speed * max_duration_s
-        return requested_rad, requested_rad
+        return 0.0, 0.0, False
 
     if target_angle_rad is not None and target_angle_rad > 0:
-        requested_rad = target_angle_rad
-        estimated_duration = min(max_duration_s, requested_rad / max(angular_speed, 0.01))
+        requested_rad = float(target_angle_rad)
+        estimated_duration = min(max_duration_s, requested_rad / max(abs(cmd.angular.z), 0.01))
+        target_mode = True
     else:
-        requested_rad = angular_speed * max_duration_s
+        requested_rad = abs(cmd.angular.z) * max_duration_s
         estimated_duration = max_duration_s
+        target_mode = False
 
-    rate = rospy.Rate(20)
+    rate = rospy.Rate(max(1.0, sample_hz))
     start_time = rospy.Time.now()
     end_time = start_time + rospy.Duration.from_sec(estimated_duration)
     last_yaw = initial_yaw
     cumulative_rotation = 0.0
+    reached_target = False
 
     while not rospy.is_shutdown():
         current_time = rospy.Time.now()
-        if target_angle_rad is not None and target_angle_rad > 0:
-            current_yaw = _get_robot_yaw(frame_id, base_frame)
-            if current_yaw is not None:
-                delta_yaw = _angle_diff(current_yaw, last_yaw)
-                cumulative_rotation += abs(delta_yaw)
-                last_yaw = current_yaw
-                if cumulative_rotation >= (target_angle_rad - tolerance_rad):
-                    break
+        current_yaw = _get_robot_yaw(frame_id, base_frame)
+        if current_yaw is not None:
+            delta_yaw = _angle_diff(current_yaw, last_yaw)
+            cumulative_rotation += abs(delta_yaw)
+            last_yaw = current_yaw
+            if target_mode and cumulative_rotation >= (requested_rad - tolerance_rad):
+                reached_target = True
+                break
         if current_time >= end_time:
             break
         _CMD_VEL_PUB.publish(cmd)
@@ -121,12 +126,41 @@ def _turn_with_verification(
         _CMD_VEL_PUB.publish(stop)
         rate.sleep()
 
-    final_yaw = _get_robot_yaw(frame_id, base_frame)
-    if final_yaw is not None:
-        actual_rotation = abs(_angle_diff(final_yaw, initial_yaw))
-    else:
-        actual_rotation = cumulative_rotation if cumulative_rotation > 0 else requested_rad
-    return actual_rotation, requested_rad
+    return cumulative_rotation, requested_rad, reached_target
+
+
+def _turn_with_verification(
+    cmd: Twist,
+    target_angle_rad: Optional[float],
+    direction: str,
+    angular_speed: float,
+    max_duration_s: float,
+    tolerance_rad: float = 0.05,
+    frame_id: str = "map",
+    base_frame: str = "base_link",
+) -> tuple[float, float, str]:
+    _ensure_pub_and_tf()
+    assert _CMD_VEL_PUB is not None
+    initial_yaw = _get_robot_yaw(frame_id, base_frame)
+    if initial_yaw is None:
+        rospy.logwarn("[turn_in_place] TF unavailable, using duration-based turn")
+        _publish_twist_for(cmd, max_duration_s)
+        requested_rad = angular_speed * max_duration_s
+        return requested_rad, requested_rad, "duration_fallback_no_tf"
+
+    actual_rotation, requested_rad, reached_target = _measure_rotation_unwrapped(
+        target_angle_rad=target_angle_rad,
+        tolerance_rad=tolerance_rad,
+        frame_id=frame_id,
+        base_frame=base_frame,
+        max_duration_s=max_duration_s,
+        cmd=cmd,
+        sample_hz=20.0,
+    )
+    method = "cumulative_tf" if reached_target or actual_rotation > 0 else "duration_estimate"
+    if method == "duration_estimate":
+        actual_rotation = requested_rad
+    return actual_rotation, requested_rad, method
 
 
 @tool
@@ -164,7 +198,7 @@ def turn_in_place(
     cmd = Twist()
     cmd.angular.z = ang if direction == "left" else -ang
 
-    actual_rad, requested_rad = _turn_with_verification(
+    actual_rad, requested_rad, measurement_method = _turn_with_verification(
         cmd=cmd,
         target_angle_rad=target_angle,
         direction=direction,
@@ -183,12 +217,13 @@ def turn_in_place(
         return (
             f"Turned in place {direction_text} by {actual_deg:.1f}° "
             f"(requested: {requested_deg:.1f}°, error: {error_deg:.1f}° / {error_percent:.1f}%). "
-            f"Angular speed: {ang:.2f} rad/s."
+            f"Angular speed: {ang:.2f} rad/s. Measurement: {measurement_method}."
         )
     return (
         f"Turned in place {direction_text} for {max_duration:.2f} s at {ang:.2f} rad/s. "
         f"Actual rotation: {actual_deg:.1f}° (expected: {requested_deg:.1f}°, "
-        f"error: {error_deg:.1f}° / {error_percent:.1f}%)."
+        f"error: {error_deg:.1f}° / {error_percent:.1f}%). "
+        f"Measurement: {measurement_method}."
     )
 
 
