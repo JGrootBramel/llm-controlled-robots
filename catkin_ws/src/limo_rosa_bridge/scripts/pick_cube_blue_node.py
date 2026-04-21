@@ -137,7 +137,10 @@ class BlueCubeGrasper:
 
         # --- ROS Interfaces for ROSA Tools ---
         self.cube_pub = rospy.Publisher("~cube_map_pose", PointStamped, queue_size=10)
+        # Keep private topic for backwards compatibility, and publish a global topic
+        # so RViz configs can subscribe consistently across detector nodes.
         self.marker_pub = rospy.Publisher("~detected_cube_markers", Marker, queue_size=10)
+        self.marker_pub_global = rospy.Publisher("/detected_objects_markers", Marker, queue_size=10)
         
         # This is the "Doorbell" the LLM rings after it finishes driving
         self.grasp_srv = rospy.Service("~execute_grasp", Trigger, self.trigger_grasp_cb)
@@ -456,6 +459,7 @@ class BlueCubeGrasper:
             marker.color.a = 1.0
             marker.lifetime = rospy.Duration(0)
             self.marker_pub.publish(marker)
+            self.marker_pub_global.publish(marker)
 
         # When grasp is armed, use live camera pose + optional visual refinement (thread)
         self.hit_count += 1
