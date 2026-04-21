@@ -5,11 +5,13 @@
   <arg name="depth_max" default="2.50" />
   <!-- Area threshold: ignore tiny noisy blobs -->
   <arg name="min_area_px" default="200" />
+  <!-- Upper cap rejects large red background regions (e.g. sofa/walls) -->
+  <arg name="max_area_px" default="3500" />
   <arg name="base_frame" default="base_link" />
   <!-- red or blue (red often better in blue-tinted rooms) -->
   <arg name="target_color" default="red" />
-  <arg name="red_s_low" default="60" />
-  <arg name="red_v_low" default="35" />
+  <arg name="red_s_low" default="85" />
+  <arg name="red_v_low" default="65" />
   <arg name="blue_s_low" default="70" />
   <arg name="blue_v_low" default="40" />
   <!-- Prefer depth *registered to color* (same WxH as /camera/color) when the driver exposes it -->
@@ -20,6 +22,7 @@
     <param name="depth_min" value="$(arg depth_min)" />
     <param name="depth_max" value="$(arg depth_max)" />
     <param name="min_area_px" value="$(arg min_area_px)" />
+    <param name="max_area_px" value="$(arg max_area_px)" />
     <param name="base_frame" value="$(arg base_frame)" />
     <param name="target_color" value="$(arg target_color)" />
     <param name="red_s_low" value="$(arg red_s_low)" />

@@ -36,6 +36,7 @@ class BlueCubeGrasper:
         self.depth_min = float(rospy.get_param("~depth_min", 0.10))
         self.depth_max = float(rospy.get_param("~depth_max", 2.50))
         self.min_area_px = int(rospy.get_param("~min_area_px", 50)) # Lowered to see further
+        self.max_area_px = int(rospy.get_param("~max_area_px", 4000))
         self.median_patch_px = int(rospy.get_param("~median_patch_px", 9))
 
         # Target color: "red" or "blue" (red often better in blue-tinted rooms)
@@ -55,8 +56,9 @@ class BlueCubeGrasper:
             red_h1_high = int(rospy.get_param("~red_h1_high", 10))
             red_h2_low = int(rospy.get_param("~red_h2_low", 170))
             red_h2_high = int(rospy.get_param("~red_h2_high", 180))
-            red_s_low = int(rospy.get_param("~red_s_low", 60))
-            red_v_low = int(rospy.get_param("~red_v_low", 35))
+            # Slightly stricter defaults to suppress dark red background clutter.
+            red_s_low = int(rospy.get_param("~red_s_low", 85))
+            red_v_low = int(rospy.get_param("~red_v_low", 65))
             self._red_low1 = np.array([red_h1_low, red_s_low, red_v_low], dtype=np.uint8)
             self._red_high1 = np.array([red_h1_high, 255, 255], dtype=np.uint8)
             self._red_low2 = np.array([red_h2_low, red_s_low, red_v_low], dtype=np.uint8)
@@ -155,9 +157,10 @@ class BlueCubeGrasper:
         )
         self.sync.registerCallback(self.cb)
         rospy.loginfo(
-            "blue_cube_grasper ready target_color=%s min_area_px=%d depth=[%.2f, %.2f] topic=%s",
+            "blue_cube_grasper ready target_color=%s area=[%d, %d] depth=[%.2f, %.2f] topic=%s",
             self.target_color,
             self.min_area_px,
+            self.max_area_px,
             self.depth_min,
             self.depth_max,
             self.depth_topic,
@@ -221,6 +224,14 @@ class BlueCubeGrasper:
                 "blue_cube_grasper: contour too small area=%.1f (< min_area_px=%d)",
                 best_area,
                 self.min_area_px,
+            )
+            return None
+        if best_area > self.max_area_px:
+            rospy.loginfo_throttle(
+                1.0,
+                "blue_cube_grasper: contour too large area=%.1f (> max_area_px=%d)",
+                best_area,
+                self.max_area_px,
             )
             return None
         M = cv2.moments(best_cnt)

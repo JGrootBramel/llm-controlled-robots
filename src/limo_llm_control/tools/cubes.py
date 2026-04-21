@@ -399,7 +399,12 @@ def _approach_one_cube_and_grasp(cube_x: float, cube_y: float, cmd_pub, rate, tf
 
 
 @tool
-def scan_for_blue_cubes(duration_seconds: int = 25, spin: bool = True) -> str:
+def scan_for_blue_cubes(
+    duration_seconds: int = 25,
+    spin: bool = True,
+    max_range_m: float = 2.5,
+    lateral_limit_m: float = 1.2,
+) -> str:
     """
     Scan for colored cubes (HSV on robot: see blue_cube_grasper target_color, often red).
     Optionally spin the base. Returns merged map (x, y) coordinates from /blue_cube_grasper/cube_map_pose.
@@ -410,12 +415,19 @@ def scan_for_blue_cubes(duration_seconds: int = 25, spin: bool = True) -> str:
         pose_topic=_CUBE_POSE_TOPIC,
         source_type="point",
         merge_distance_m=0.05,
+        max_range_m=max(0.3, float(max_range_m)),
+        lateral_limit_m=max(0.2, float(lateral_limit_m)),
     )
     return _format_scan_result("cubes", merged)
 
 
 @tool
-def scan_for_red_cubes(duration_seconds: int = 25, spin: bool = True) -> str:
+def scan_for_red_cubes(
+    duration_seconds: int = 25,
+    spin: bool = True,
+    max_range_m: float = 2.5,
+    lateral_limit_m: float = 1.2,
+) -> str:
     """
     Convenience wrapper for scanning red cubes from /blue_cube_grasper/cube_map_pose.
     Use this after configuring the cube grasper for red HSV thresholds.
@@ -426,6 +438,8 @@ def scan_for_red_cubes(duration_seconds: int = 25, spin: bool = True) -> str:
         pose_topic=_CUBE_POSE_TOPIC,
         source_type="point",
         merge_distance_m=0.05,
+        max_range_m=max(0.3, float(max_range_m)),
+        lateral_limit_m=max(0.2, float(lateral_limit_m)),
     )
     return _format_scan_result("red cubes", merged)
 
@@ -437,6 +451,8 @@ def scan_for_items(
     spin: bool = True,
     source: str = "object_pose",
     merge_distance_m: float = 0.08,
+    max_range_m: float = 2.5,
+    lateral_limit_m: float = 1.2,
 ) -> str:
     """
     Generic scanner for extensible item types (pens, bottles, cubes, etc.).
@@ -449,6 +465,8 @@ def scan_for_items(
             - 'cube_pose': /blue_cube_grasper/cube_map_pose (PointStamped)
             - 'object_pose': /object_pose (PoseStamped)
         merge_distance_m: Dedup radius for merged map points.
+        max_range_m: Ignore detections farther than this range.
+        lateral_limit_m: Ignore detections with |y| larger than this limit.
     """
     src = source.strip().lower()
     if src == "cube_pose":
@@ -470,6 +488,8 @@ def scan_for_items(
         pose_topic=pose_topic,
         source_type=source_type,
         merge_distance_m=max(0.01, float(merge_distance_m)),
+        max_range_m=max(0.3, float(max_range_m)),
+        lateral_limit_m=max(0.2, float(lateral_limit_m)),
     )
     return _format_scan_result(item_name_plural, merged)
 
