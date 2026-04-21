@@ -44,15 +44,23 @@ class BlueCubeGrasper:
             self.target_color = "red"
         # HSV for blue: single band; for red: two bands (H wraps 0/180 in OpenCV)
         if self.target_color == "blue":
-            self.h_low, self.h_high = 105, 135
-            self.s_low, self.v_low = 80, 50
+            self.h_low = int(rospy.get_param("~blue_h_low", 105))
+            self.h_high = int(rospy.get_param("~blue_h_high", 135))
+            self.s_low = int(rospy.get_param("~blue_s_low", 70))
+            self.v_low = int(rospy.get_param("~blue_v_low", 40))
             self._red_low1 = self._red_high1 = self._red_low2 = self._red_high2 = None
         else:
             # Red: (0–10) and (170–180) in H
-            self._red_low1 = np.array([0, 80, 50], dtype=np.uint8)
-            self._red_high1 = np.array([10, 255, 255], dtype=np.uint8)
-            self._red_low2 = np.array([170, 80, 50], dtype=np.uint8)
-            self._red_high2 = np.array([180, 255, 255], dtype=np.uint8)
+            red_h1_low = int(rospy.get_param("~red_h1_low", 0))
+            red_h1_high = int(rospy.get_param("~red_h1_high", 10))
+            red_h2_low = int(rospy.get_param("~red_h2_low", 170))
+            red_h2_high = int(rospy.get_param("~red_h2_high", 180))
+            red_s_low = int(rospy.get_param("~red_s_low", 60))
+            red_v_low = int(rospy.get_param("~red_v_low", 35))
+            self._red_low1 = np.array([red_h1_low, red_s_low, red_v_low], dtype=np.uint8)
+            self._red_high1 = np.array([red_h1_high, 255, 255], dtype=np.uint8)
+            self._red_low2 = np.array([red_h2_low, red_s_low, red_v_low], dtype=np.uint8)
+            self._red_high2 = np.array([red_h2_high, 255, 255], dtype=np.uint8)
             self.h_low = self.h_high = self.s_low = self.v_low = None
 
         # --- State Tracking ---
@@ -143,7 +151,14 @@ class BlueCubeGrasper:
             [s_rgb, s_depth, s_info], queue_size=10, slop=0.15
         )
         self.sync.registerCallback(self.cb)
-        rospy.loginfo("blue_cube_grasper (Tool Server) ready with %s HSV filter", self.target_color)
+        rospy.loginfo(
+            "blue_cube_grasper ready target_color=%s min_area_px=%d depth=[%.2f, %.2f] topic=%s",
+            self.target_color,
+            self.min_area_px,
+            self.depth_min,
+            self.depth_max,
+            self.depth_topic,
+        )
 
     def trigger_grasp_cb(self, req):
         """Arm the grasp; camera callback will perform it using live detection for better accuracy."""
@@ -164,13 +179,11 @@ class BlueCubeGrasper:
         except Exception as e:
             rospy.logwarn_throttle(5.0, "blue_cube_grasper: cv_bridge error: %s", e)
             return None, None
-
     def _camera_snapshot(self, info_msg: CameraInfo):
         """Copy everything needed from CameraInfo; safe to use from any thread with matching rgb/depth copies."""
         fid = info_msg.header.frame_id if info_msg.header.frame_id else self.camera_frame
         K = tuple(float(info_msg.K[i]) for i in range(9))
         return {"frame_id": str(fid), "K": K}
-
     def _extract_detection_dict(self, rgb, depth, snap: dict):
         """
         Single-frame blob + depth → (u, v, Z, p_base, p_map) or None.
@@ -195,9 +208,17 @@ class BlueCubeGrasper:
 
         cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not cnts:
+            rospy.logdebug_throttle(1.0, "blue_cube_grasper: no color contour for target=%s", self.target_color)
             return None
         best_cnt = max(cnts, key=cv2.contourArea)
-        if cv2.contourArea(best_cnt) < self.min_area_px:
+        best_area = float(cv2.contourArea(best_cnt))
+        if best_area < self.min_area_px:
+            rospy.loginfo_throttle(
+                1.0,
+                "blue_cube_grasper: contour too small area=%.1f (< min_area_px=%d)",
+                best_area,
+                self.min_area_px,
+            )
             return None
         M = cv2.moments(best_cnt)
         u, v = int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])
@@ -206,12 +227,28 @@ class BlueCubeGrasper:
         ud, vd = self._color_to_depth_pixels(u, v, W, H, Wd, Hd)
         Z = self._median_depth_patch(depth, ud, vd, Hd, Wd)
         if Z is None:
+            rospy.loginfo_throttle(
+                1.0,
+                "blue_cube_grasper: invalid depth at uv=(%d,%d)->(%d,%d), depth bounds=[%.2f, %.2f]",
+                u,
+                v,
+                ud,
+                vd,
+                self.depth_min,
+                self.depth_max,
+            )
             return None
         Xc, Yc = (u - cx_i) * Z / fx, (v - cy_i) * Z / fy
         frame_id = snap["frame_id"]
         p_base = self._to_frame_optical(frame_id, Xc, Yc, Z, self.base_frame)
         p_map = self._to_frame_optical(frame_id, Xc, Yc, Z, self.target_frame)
         if p_base is None:
+            rospy.loginfo_throttle(
+                1.0,
+                "blue_cube_grasper: TF camera->%s failed (camera frame=%s)",
+                self.base_frame,
+                frame_id,
+            )
             return None
         return (u, v, Z, p_base, p_map)
 

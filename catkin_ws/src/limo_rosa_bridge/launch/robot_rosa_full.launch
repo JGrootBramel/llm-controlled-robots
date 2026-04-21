@@ -1,0 +1,86 @@
+<launch>
+  <!--
+    Full on-robot stack for ROSA + live SLAM (gmapping) + DaBai U3 RGB-D + perception + cube grasper.
+
+    Typical use on the robot (after sourcing ROS + workspace):
+      roslaunch limo_rosa_bridge robot_rosa_full.launch
+
+    Optional overrides:
+      cube_target_color:=red
+      object_finder_prompt:='"a red cube"'
+
+    This launch starts:
+      - limo_bringup/limo_start          (base, lidar, TFs)
+      - limo_bringup/limo_gmapping       (online SLAM → /map; do not use map_server+amcl with this)
+      - limo_bringup/limo_move_base      (navigation on the live map)
+      - astra_camera/dabai_u3            (640×480 color, 640×400 depth; depth_align on)
+      - rosbridge_server                 (WebSocket, port 9090)
+      - cam_coverage + autonomy_core
+      - object_finder (NanoOWL)
+      - blue_cube_grasper                (HSV + depth; /blue_cube_grasper/execute_grasp)
+
+    For a saved map instead: use a static-map launch (map_server + amcl) and omit gmapping.
+
+    Remote ROSA: ROS_MASTER_URI → robot; source Noetic; run scripts/run_rosa_with_ros.sh src/rosa_agent.py
+  -->
+
+  <!-- Perception (object_finder_node) -->
+  <arg name="object_finder_prompt" default="a water bottle" />
+  <arg name="object_finder_threshold" default="0.15" />
+  <arg name="object_finder_min_hits" default="3" />
+  <arg name="object_finder_show_debug" default="true" />
+
+  <!-- Cube HSV + grasp server (ROSA scan/fetch tools) -->
+  <arg name="cube_target_color" default="red" />
+  <arg name="cube_stable_hits" default="3" />
+  <arg name="cube_min_area_px" default="200" />
+  <arg name="cube_red_s_low" default="60" />
+  <arg name="cube_red_v_low" default="35" />
+  <!-- Depth aligned to color (same WxH) is best; raw depth uses pixel remap inside grasper -->
+  <arg name="cube_depth_topic" default="/camera/depth/image_raw" />
+
+  <!-- 1) Base + sensors (+ RViz if configured in bringup) -->
+  <include file="$(find limo_bringup)/launch/limo_start.launch" />
+
+  <!-- 2) Live mapping: publishes /map (do not combine with static map_server + AMCL) -->
+  <include file="$(find limo_bringup)/launch/limo_gmapping.launch" />
+
+  <!-- 3) Navigation on the SLAM map -->
+  <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
+
+  <!-- 4) DaBai U3 (Astra family) — match device topic namespace e.g. /camera/... for grasper defaults -->
+  <include file="$(find astra_camera)/launch/dabai_u3.launch">
+    <arg name="enable_depth" value="true" />
+    <arg name="depth_align" value="true" />
+    <arg name="color_width" value="640" />
+    <arg name="color_height" value="480" />
+    <arg name="depth_width" value="640" />
+    <arg name="depth_height" value="400" />
+  </include>
+
+  <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" />
+
+  <!-- 5) Coverage / exploration helpers (planners off by default) -->
+  <include file="$(find limo_rosa_bridge)/launch/autonomy_core.launch">
+    <arg name="use_frontier_planner" value="false" />
+    <arg name="use_straight_planner" value="false" />
+  </include>
+
+  <!-- 6) OWL object finder -->
+  <include file="$(find limo_rosa_bridge)/launch/autonomy_perception.launch">
+    <arg name="prompt" value="$(arg object_finder_prompt)" />
+    <arg name="threshold" value="$(arg object_finder_threshold)" />
+    <arg name="min_hits" value="$(arg object_finder_min_hits)" />
+    <arg name="show_debug_window" value="$(arg object_finder_show_debug)" />
+  </include>
+
+  <!-- 7) HSV + depth grasper + MyCobot -->
+  <include file="$(find limo_rosa_bridge)/launch/autonomy_blue_grasp.launch">
+    <arg name="target_color" value="$(arg cube_target_color)" />
+    <arg name="stable_hits" value="$(arg cube_stable_hits)" />
+    <arg name="min_area_px" value="$(arg cube_min_area_px)" />
+    <arg name="red_s_low" value="$(arg cube_red_s_low)" />
+    <arg name="red_v_low" value="$(arg cube_red_v_low)" />
+    <arg name="depth_topic" value="$(arg cube_depth_topic)" />
+  </include>
+</launch>
