@@ -3,8 +3,9 @@
 set -euo pipefail
 
 # Quick sync script:
-# - Push local main to robot's bare-ish repo endpoint over SSH
-# - Optionally update robot working tree to checked out main
+# - Push local main to a temporary branch on the robot
+# - Fast-forward robot main from that temp branch over SSH
+# This avoids "refusing to update checked out branch" on non-bare repos.
 
 ROBOT_USER="agilex"
 ROBOT_HOST="192.168.0.105"
@@ -12,6 +13,7 @@ ROBOT_BRANCH="main"
 REMOTE_REPO_PATH="/home/agilex/llm-controlled-robots/.git"
 REMOTE_WORKTREE_PATH="/home/agilex/llm-controlled-robots"
 REMOTE_NAME="robot"
+SYNC_BRANCH="sync-from-remote-main"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -40,11 +42,11 @@ else
   git remote add "${REMOTE_NAME}" "${REMOTE_URL}"
 fi
 
-echo "Pushing '${ROBOT_BRANCH}' to robot..."
-git push "${REMOTE_NAME}" "${ROBOT_BRANCH}:${ROBOT_BRANCH}"
+echo "Pushing '${ROBOT_BRANCH}' to robot temporary branch '${SYNC_BRANCH}'..."
+git push "${REMOTE_NAME}" "${ROBOT_BRANCH}:${SYNC_BRANCH}"
 
 echo "Updating robot working tree to '${ROBOT_BRANCH}'..."
 ssh "${ROBOT_USER}@${ROBOT_HOST}" \
-  "cd '${REMOTE_WORKTREE_PATH}' && git fetch --all && git checkout '${ROBOT_BRANCH}' && git pull --ff-only origin '${ROBOT_BRANCH}'"
+  "cd '${REMOTE_WORKTREE_PATH}' && git checkout '${ROBOT_BRANCH}' && git merge --ff-only '${SYNC_BRANCH}' && git branch -D '${SYNC_BRANCH}'"
 
 echo "Sync complete."
