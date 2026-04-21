@@ -68,6 +68,14 @@ Then run query-driven object scan mode:
 2. Run `scan_for_objects(object_query="a red cube", duration_seconds=20, spin=True)`.
 3. Verify map-frame detections are returned.
 
+Then run detection-to-grasp mode:
+
+1. Start object finder with prompt `"a red cube"`.
+2. Run `scan_for_objects(object_query="a red cube", duration_seconds=20, spin=True)`.
+3. Run `grasp_detected_object()`.
+4. Verify the response reports success or a clear failure reason.
+5. Verify arm/gripper motion occurred on robot when grasp succeeded.
+
 ## 6) Common failure checks
 
 - Missing Python dependency in active environment.
@@ -96,6 +104,16 @@ Start object finder with prompt "a red cube".
 Scan for objects using query "a red cube" for 30 seconds while spinning.
 Start object finder with prompt "a bottle".
 Scan for objects using query "a bottle" for 30 seconds while spinning.
+Stop all autonomy nodes.
+```
+
+## Quick test prompt set (object grasping)
+
+```text
+Start object finder with prompt "a red cube".
+Scan for objects using query "a red cube" for 20 seconds while spinning.
+Grasp detected object.
+Get autonomy status.
 Stop all autonomy nodes.
 ```
 

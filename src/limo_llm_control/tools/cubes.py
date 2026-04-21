@@ -9,7 +9,7 @@ import rospy
 from geometry_msgs.msg import Twist, PoseStamped
 from langchain.tools import tool
 
-from .motion import turn_in_place
+from ..ros_clients import ensure_rospy
 from .perception import update_object_query
 _OBJECT_POSE_TOPIC = "/object_pose"
 
@@ -25,6 +25,7 @@ def _run_scan(
     round_precision: int = 1,
 ):
     """Run a generic object scan and return merged map (x, y) coordinates."""
+    ensure_rospy()
     cmd_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
     found_points = set()
 
@@ -42,12 +43,14 @@ def _run_scan(
     sub = rospy.Subscriber(pose_topic, PoseStamped, pose_cb)
 
     end_time = rospy.Time.now() + rospy.Duration(duration_seconds)
-    if spin:
-        # Reuse motion tool turn verification to perform one full 360° scan turn.
-        turn_in_place(direction="left", angular_speed=0.5, angle_rad=2.0 * math.pi)
-
     rate = rospy.Rate(10)
+    spin_cmd = Twist()
+    if spin:
+        # Rotate continuously while listening for detections.
+        spin_cmd.angular.z = 0.5
     while rospy.Time.now() < end_time and not rospy.is_shutdown():
+        if spin:
+            cmd_pub.publish(spin_cmd)
         rate.sleep()
 
     cmd_pub.publish(Twist())
@@ -87,6 +90,7 @@ def scan_for_objects(
 
     This tool updates `/object_query` and then listens on `/object_pose`.
     """
+    ensure_rospy()
     q = object_query.strip()
     if q:
         update_object_query(q)

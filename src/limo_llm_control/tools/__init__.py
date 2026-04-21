@@ -23,6 +23,7 @@ from .navigation import (
     go_to_map_pose,
 )
 from .perception import (
+    grasp_detected_object,
     start_object_finder_node,
     update_object_query,
     show_camera_feed
@@ -38,6 +39,7 @@ __all__ = [
     "reset_cam_coverage",
     "start_straight_planner_node",
     "start_object_finder_node",
+    "grasp_detected_object",
     "update_object_query",
     "stop_autonomy_nodes",
     "get_autonomy_status",

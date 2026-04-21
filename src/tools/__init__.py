@@ -9,6 +9,7 @@ All tools use rospy for communication (see docs/architecture/communication-optio
 
 from limo_llm_control.tools import (
     drive_distance,
+    grasp_detected_object,
     get_autonomy_status,
     reset_cam_coverage,
     start_cam_coverage_node,
@@ -29,6 +30,7 @@ __all__ = [
     "start_frontier_planner_node",
     "start_straight_planner_node",
     "start_object_finder_node",
+    "grasp_detected_object",
     "update_object_query",
     "stop_autonomy_nodes",
     "get_autonomy_status",

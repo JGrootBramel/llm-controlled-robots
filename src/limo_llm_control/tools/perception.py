@@ -11,6 +11,7 @@ from asyncio import subprocess
 import rospy
 from langchain.tools import tool
 from std_msgs.msg import String
+from std_srvs.srv import Trigger
 
 from ..ros_clients import ensure_rospy
 from . import _node_runner as runner
@@ -101,3 +102,28 @@ def show_camera_feed() -> str:
         return "Error: 'rqt_image_view' was not found. Please install it with 'sudo apt install ros-noetic-rqt-image-view'."
     except Exception as e:
         return f"Unexpected error while starting the feed: {str(e)}"
+
+
+@tool
+def grasp_detected_object(service_name: str = "/object_finder/grasp_detected_object") -> str:
+    """
+    Trigger an explicit grasp attempt for the latest detected object.
+
+    Calls a standard ROS Trigger service exposed by object_finder_node.
+    """
+    ensure_rospy()
+    try:
+        rospy.wait_for_service(service_name, timeout=2.0)
+    except Exception:
+        return (
+            f"Grasp service '{service_name}' is unavailable. "
+            "Start object_finder_node first and ensure it is up-to-date."
+        )
+
+    try:
+        proxy = rospy.ServiceProxy(service_name, Trigger)
+        resp = proxy()
+        state = "succeeded" if resp.success else "failed"
+        return f"Grasp attempt {state}: {resp.message}"
+    except Exception as exc:
+        return f"Failed to call grasp service '{service_name}': {exc}"

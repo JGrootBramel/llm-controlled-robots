@@ -74,7 +74,7 @@ This should start:
 - `autonomy_core.launch`, `autonomy_perception.launch`
 
 Use this mode when you want ROSA to **navigate using a prebuilt map**, e.g.
-with the `go_to_map_pose` tool or cube-fetching tools that send map-frame goals.
+with the `go_to_map_pose` tool or object-detection workflows that send map-frame goals.
 
 ## 3) Start ROSA from remote PC
 
@@ -120,7 +120,8 @@ In ROSA chat, run these in order:
 3. `Get autonomy status.`
 4. `Update object query to "a red cube".`
 5. `Scan for objects using query "a red cube" for 20 seconds while spinning.`
-6. `Get autonomy status.`
+6. `Grasp detected object.`
+7. `Get autonomy status.`
 
 Expected:
 
@@ -136,6 +137,7 @@ Expected:
 rostopic echo -n1 /object_detection_ready
 rostopic echo -n1 /object_found
 rostopic echo -n1 /object_pose
+rosservice list | grep object_finder/grasp_detected_object
 rosservice list | grep cam_coverage/reset
 ```
 
@@ -156,7 +158,9 @@ rosservice list | grep cam_coverage/reset
     - object finder `threshold`, `min_hits`
     - object finder `prompt`, `threshold`, `min_hits`
 
-- Grasper window appears but no grasp:
+- Grasp command fails or no arm motion:
+  - Confirm service exists: `/object_finder/grasp_detected_object`.
+  - Ensure at least one valid detection was produced before calling grasp.
   - Confirm `pymycobot` access, serial port, and permissions.
   - Verify arm reach and frame mapping.
 

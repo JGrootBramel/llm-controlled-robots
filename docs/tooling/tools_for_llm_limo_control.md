@@ -18,6 +18,10 @@ with focus on perception/scanning workflows.
   - Canonical scan API.
   - Updates `/object_query`, listens on `/object_pose`, and returns deduplicated map coordinates.
 
+- `grasp_detected_object(service_name="/object_finder/grasp_detected_object")`
+  - Triggers a grasp attempt for the currently detected object via ROS `Trigger` service.
+  - Reuses the existing object_finder grasp pipeline (`_compute_grasp`/`do_grasp`).
+
 ## Recommended Usage Patterns
 
 ### Find all red cubes in a room
@@ -26,6 +30,15 @@ with focus on perception/scanning workflows.
    - `start_object_finder_node(prompt="a red cube")`
 2. Scan while rotating:
    - `scan_for_objects(object_query="a red cube", duration_seconds=30, spin=True)`
+
+### Detect then grasp an object
+
+1. Start detector:
+   - `start_object_finder_node(prompt="a red cube")`
+2. Detect and localize:
+   - `scan_for_objects(object_query="a red cube", duration_seconds=20, spin=True)`
+3. Trigger grasp:
+   - `grasp_detected_object()`
 
 ### Find all bottles (or pens) in a room
 

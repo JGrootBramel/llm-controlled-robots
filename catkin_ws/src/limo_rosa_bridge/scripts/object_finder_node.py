@@ -13,6 +13,7 @@ from PIL import Image as PILImage
 from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import PoseStamped, PointStamped, Quaternion, Point, Twist, PoseWithCovarianceStamped
 from std_msgs.msg import String, Bool
+from std_srvs.srv import Trigger, TriggerResponse
 from tf.transformations import quaternion_from_euler, euler_from_quaternion
 
 from pymycobot import MyCobot280
@@ -72,6 +73,7 @@ class ObjectFinder:
         self._init_detector()
         self._init_arm()
         self._init_ros_comm()
+        self._init_services()
         self._init_traj_logging()
 
         # signal readiness for other nodes
@@ -211,6 +213,14 @@ class ObjectFinder:
         rospy.Subscriber("/object_query", String, self.query_cb, queue_size=1)
         rospy.Subscriber("/amcl_pose", PoseWithCovarianceStamped, self.amcl_callback)
 
+    def _init_services(self):
+        """Expose explicit service hooks for external orchestrators (e.g., ROSA)."""
+        self.grasp_srv = rospy.Service(
+            "~grasp_detected_object",
+            Trigger,
+            self._handle_grasp_service,
+        )
+
     def _init_traj_logging(self):
         """
         Prepare trajectory logging (path, directory) and start sampling timer.
@@ -308,6 +318,11 @@ class ObjectFinder:
         if self._handle_pre_detection_states():
             return
 
+        # Cache latest synchronized sensor messages for on-demand service grasp.
+        self._last_rgb_msg = rgb_msg
+        self._last_depth_msg = depth_msg
+        self._last_info_msg = info_msg
+
         # Convert messages to usable arrays and camera params
         frame = self._prepare_frame(rgb_msg, depth_msg, info_msg)
         if frame is None:
@@ -368,6 +383,27 @@ class ObjectFinder:
         # Update detection state, FSM transitions and possibly trigger close-in / grasp
         self._update_detection_state(rgb_msg, depth_msg, info_msg, x1, y1, x2, y2, 
                                      u, v, Z, p_base, p_map)
+
+    def _handle_grasp_service(self, _req):
+        """
+        Service handler to trigger grasp on demand using latest synchronized frame.
+        """
+        if self.last_detection is None:
+            return TriggerResponse(success=False, message="No object detection available yet.")
+
+        rgb_msg = getattr(self, "_last_rgb_msg", None)
+        depth_msg = getattr(self, "_last_depth_msg", None)
+        info_msg = getattr(self, "_last_info_msg", None)
+        if rgb_msg is None or depth_msg is None or info_msg is None:
+            return TriggerResponse(
+                success=False,
+                message="No synchronized RGB-D frame cached yet for grasp computation.",
+            )
+
+        ok = bool(self._compute_grasp(rgb_msg, depth_msg, info_msg))
+        if ok:
+            return TriggerResponse(success=True, message="Grasp sequence executed successfully.")
+        return TriggerResponse(success=False, message="Grasp attempt failed.")
         
     def _handle_pre_detection_states(self) -> bool:
         """
