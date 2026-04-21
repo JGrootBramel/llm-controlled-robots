@@ -49,7 +49,7 @@ This should start:
 - `autonomy_core.launch`:
   - `cam_coverage_node.py`
   - one planner (frontier or straight)
-- `autonomy_perception.launch` and optional blue grasp stack
+- `autonomy_perception.launch`
 
 Use this mode when you are **building or extending a map**.
 
@@ -71,7 +71,7 @@ This should start:
 - `limo_move_base.launch` (navigation)
 - `astra_pro.launch` (camera)
 - `rosbridge_websocket`
-- `autonomy_core.launch`, `autonomy_perception.launch`, `autonomy_blue_grasp.launch`
+- `autonomy_core.launch`, `autonomy_perception.launch`
 
 Use this mode when you want ROSA to **navigate using a prebuilt map**, e.g.
 with the `go_to_map_pose` tool or cube-fetching tools that send map-frame goals.
@@ -118,19 +118,17 @@ In ROSA chat, run these in order:
 1. `Get autonomy status.`
 2. `Start object finder with prompt "a water bottle", threshold 0.15, show_debug_window true.`
 3. `Get autonomy status.`
-4. `Update object query to "a blue cube".`
-5. `Stop autonomy node object_finder.`
-6. `Start blue cube grasper with show_debug_window true.`
-7. `Get autonomy status.`
+4. `Update object query to "a red cube".`
+5. `Scan for objects using query "a red cube" for 20 seconds while spinning.`
+6. `Get autonomy status.`
 
 Expected:
 
 - `/object_detection_ready` becomes `true` when object finder is running.
 - `/object_found` toggles `true` when detected.
 - `/object_pose` gets populated.
-- On robot display, debug windows appear:
+- On robot display, debug window appears:
   - `object_finder_debug`
-  - `blue_cube_debug`
 
 ## 5) Topic/service checks (robot or remote terminal)
 
@@ -156,7 +154,7 @@ rosservice list | grep cam_coverage/reset
   - Check TF chain includes camera frame to `base_link`.
   - Tune thresholds:
     - object finder `threshold`, `min_hits`
-    - blue grasper `h_low`, `h_high`, `s_low`, `v_low`, `min_area_px`
+    - object finder `prompt`, `threshold`, `min_hits`
 
 - Grasper window appears but no grasp:
   - Confirm `pymycobot` access, serial port, and permissions.
@@ -172,7 +170,7 @@ From terminal (if needed):
 
 ```bash
 rosnode list
-rosnode kill /object_finder /blue_cube_grasper /cam_coverage_node /frontier_goal_selector /straight_explore_planner
+rosnode kill /object_finder /cam_coverage_node /frontier_goal_selector /straight_explore_planner
 ```
 
 ## 8) Minimal success criteria

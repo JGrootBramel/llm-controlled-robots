@@ -175,7 +175,6 @@ catkin_install_python(PROGRAMS
   scripts/frontier_planner_node.py
   scripts/straight_planner_node.py
   scripts/object_finder_node.py
-  scripts/pick_cube_blue_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

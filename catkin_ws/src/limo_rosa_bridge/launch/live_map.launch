@@ -29,5 +29,4 @@
   </include>
 
   <include file="$(find limo_rosa_bridge)/launch/autonomy_perception.launch" />
-  <include file="$(find limo_rosa_bridge)/launch/autonomy_blue_grasp.launch" />
 </launch>

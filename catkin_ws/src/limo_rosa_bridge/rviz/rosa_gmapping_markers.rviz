@@ -94,7 +94,7 @@ Visualization Manager:
       Marker Topic: /detected_objects_markers
       Name: Detected Objects
       Namespaces:
-        blue_cubes: true
+        detected_objects: true
       Queue Size: 100
       Value: true
   Enabled: true

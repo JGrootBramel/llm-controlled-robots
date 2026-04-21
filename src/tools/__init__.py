@@ -11,7 +11,6 @@ from limo_llm_control.tools import (
     drive_distance,
     get_autonomy_status,
     reset_cam_coverage,
-    start_blue_cube_grasper_node,
     start_cam_coverage_node,
     start_frontier_planner_node,
     start_object_finder_node,
@@ -19,9 +18,7 @@ from limo_llm_control.tools import (
     stop_autonomy_nodes,
     turn_in_place,
     update_object_query,
-    scan_for_blue_cubes,
-    fetch_and_store_cube,
-    pick_up_cubes_in_area,
+    scan_for_objects,
 )
 
 __all__ = [
@@ -33,10 +30,7 @@ __all__ = [
     "start_straight_planner_node",
     "start_object_finder_node",
     "update_object_query",
-    "start_blue_cube_grasper_node",
     "stop_autonomy_nodes",
     "get_autonomy_status",
-    "scan_for_blue_cubes",
-    "fetch_and_store_cube",
-    "pick_up_cubes_in_area",
+    "scan_for_objects",
 ]

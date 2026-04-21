@@ -27,7 +27,7 @@ In the chat prompt, run one command at a time:
 2. `Get autonomy status.`
 3. `Reset camera coverage.`
 4. `Start object finder with prompt 'a water bottle' and threshold 0.2.`
-5. `Update object query to 'a blue cube'.`
+5. `Update object query to 'a red cube'.`
 6. `Stop all autonomy nodes.`
 
 Expected result:
@@ -62,11 +62,11 @@ Run this sequence:
 4. Poll status until object flags update.
 5. Stop all nodes.
 
-Then run blue-cube grasp mode separately to isolate failures:
+Then run query-driven object scan mode:
 
-1. Start blue-cube grasper.
-2. Observe behavior and logs.
-3. Stop that node.
+1. Start object finder with prompt `"a red cube"`.
+2. Run `scan_for_objects(object_query="a red cube", duration_seconds=20, spin=True)`.
+3. Verify map-frame detections are returned.
 
 ## 6) Common failure checks
 
@@ -83,19 +83,19 @@ Copy/paste one-by-one in ROSA chat:
 ```text
 Start cam coverage with range 1.5 meters.
 Get autonomy status.
-Start object finder with prompt "a blue cube".
-Update object query to "a blue cube".
+Start object finder with prompt "a red cube".
+Update object query to "a red cube".
 Get autonomy status.
 Stop all autonomy nodes.
 ```
 
-## Quick test prompt set (new flexible scanning)
+## Quick test prompt set (unified object scanning)
 
 ```text
-Start color cube grasper with target color "red".
-Scan for red cubes for 30 seconds while spinning.
+Start object finder with prompt "a red cube".
+Scan for objects using query "a red cube" for 30 seconds while spinning.
 Start object finder with prompt "a bottle".
-Scan for items using query "a bottle" from source "object_pose" for 30 seconds while spinning.
+Scan for objects using query "a bottle" for 30 seconds while spinning.
 Stop all autonomy nodes.
 ```
 

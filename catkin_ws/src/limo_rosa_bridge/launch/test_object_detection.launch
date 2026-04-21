@@ -43,8 +43,8 @@
     <arg name="use_straight_planner" value="false" />
   </include>
 
-  <!-- 7) Blue cube detection and grasping (publishes /object_found, /object_pose) -->
-  <include file="$(find limo_rosa_bridge)/launch/autonomy_blue_grasp.launch">
+  <!-- 7) Object detection only -->
+  <include file="$(find limo_rosa_bridge)/launch/autonomy_perception.launch">
     <arg name="show_debug_window" value="true" />
   </include>
 </launch>

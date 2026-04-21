@@ -1,6 +1,6 @@
 <launch>
   <!--
-    Full on-robot stack for ROSA + live SLAM (gmapping) + DaBai U3 RGB-D + perception + cube grasper.
+    Full on-robot stack for ROSA + live SLAM (gmapping) + DaBai U3 RGB-D + perception.
 
     Typical use on the robot (after sourcing ROS + workspace):
       roslaunch limo_rosa_bridge robot_rosa_full.launch
@@ -17,7 +17,6 @@
       - rosbridge_server                 (WebSocket, port 9090)
       - cam_coverage + autonomy_core
       - object_finder (NanoOWL)
-      - blue_cube_grasper                (HSV + depth; /blue_cube_grasper/execute_grasp)
 
     For a saved map instead: use a static-map launch (map_server + amcl) and omit gmapping.
 
@@ -30,12 +29,6 @@
   <arg name="object_finder_min_hits" default="3" />
   <arg name="object_finder_show_debug" default="true" />
 
-  <!-- Cube HSV + grasp server (ROSA scan/fetch tools) -->
-  <arg name="cube_target_color" default="red" />
-  <arg name="cube_stable_hits" default="3" />
-  <arg name="cube_min_area_px" default="200" />
-  <!-- Depth aligned to color (same WxH) is best; raw depth uses pixel remap inside grasper -->
-  <arg name="cube_depth_topic" default="/camera/depth/image_raw" />
   <arg name="start_rviz" default="true" />
   <arg name="rviz_config" default="$(find limo_rosa_bridge)/rviz/rosa_gmapping_markers.rviz" />
 
@@ -74,14 +67,6 @@
     <arg name="show_debug_window" value="$(arg object_finder_show_debug)" />
   </include>
 
-  <!-- 7) HSV + depth grasper + MyCobot -->
-  <include file="$(find limo_rosa_bridge)/launch/autonomy_blue_grasp.launch">
-    <arg name="target_color" value="$(arg cube_target_color)" />
-    <arg name="stable_hits" value="$(arg cube_stable_hits)" />
-    <arg name="min_area_px" value="$(arg cube_min_area_px)" />
-    <arg name="depth_topic" value="$(arg cube_depth_topic)" />
-  </include>
-
-  <!-- 8) Known-good RViz config: map + detected object markers enabled by default -->
+  <!-- 7) Known-good RViz config: map + detected object markers enabled by default -->
   <node if="$(arg start_rviz)" pkg="rviz" type="rviz" name="rviz_rosa" args="-d $(arg rviz_config)" output="screen" />
 </launch>

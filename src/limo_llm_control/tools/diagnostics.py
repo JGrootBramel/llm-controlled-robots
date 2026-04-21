@@ -32,7 +32,6 @@ def stop_autonomy_nodes(node: Literal["all", "frontier_planner"] = "all") -> str
     
     if node == "all":
         runner.stop_node("object_finder")
-        runner.stop_node("blue_cube_grasper")
         
     return "Autonomy halted: Brain killed, waited for shutdown, and wheels locked."
 

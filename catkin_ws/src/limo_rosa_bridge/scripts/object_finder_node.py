@@ -188,8 +188,7 @@ class ObjectFinder:
         self.pub_found  = rospy.Publisher("/object_found", Bool, queue_size=1, latch=True)
         self.pub_ready  = rospy.Publisher("/object_detection_ready", Bool, queue_size=1, latch=True)
         self.pub_pose   = rospy.Publisher("/object_pose",  PoseStamped, queue_size=1, latch=True)
-        self.pub_marker = rospy.Publisher("/detected_cube_markers", Marker, queue_size=10)
-        self.pub_marker_global = rospy.Publisher("/detected_objects_markers", Marker, queue_size=10)
+        self.pub_marker = rospy.Publisher("/detected_objects_markers", Marker, queue_size=10)
         self.pub_goal   = rospy.Publisher("/move_base_simple/goal", PoseStamped, queue_size=1)
         self.pub_cmd_vel = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
         self.pub_dbg    = (rospy.Publisher("/object_debug", Image, queue_size=1) if self.publish_debug else None)
@@ -712,7 +711,7 @@ class ObjectFinder:
         marker = Marker()
         marker.header.frame_id = self.target_frame
         marker.header.stamp = rospy.Time.now()
-        marker.ns = "blue_cubes"
+        marker.ns = "detected_objects"
 
         # Use the PointStamped coordinates (10 cm grid) to form a stable ID
         x = float(p_map.point.x)
@@ -740,7 +739,6 @@ class ObjectFinder:
         marker.lifetime = rospy.Duration(0) 
         
         self.pub_marker.publish(marker)
-        self.pub_marker_global.publish(marker)
 
     def _update_detection_state(self, rgb_msg, depth_msg, info_msg,
                             x1, y1, x2, y2, u, v, Z, p_base, p_map):

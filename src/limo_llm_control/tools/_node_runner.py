@@ -33,14 +33,12 @@ NODE_SCRIPTS: Dict[str, str] = {
     "frontier_planner": "frontier_planner.py",
     "straight_planner": "straight_planner.py",
     "object_finder": "object_finder.py",
-    "blue_cube_grasper": "pick_cube_blue.py",
 }
 CORE_NODE_KEYS = {"cam_coverage", "frontier_planner", "straight_planner"}
 
 LAUNCH_FILES: Dict[str, str] = {
     "autonomy_core": "autonomy_core.launch",
     "autonomy_perception": "autonomy_perception.launch",
-    "autonomy_blue_grasp": "autonomy_blue_grasp.launch",
 }
 
 _PROCESSES: Dict[str, subprocess.Popen] = {}
@@ -53,7 +51,6 @@ NODE_TO_ROSNODES: Dict[str, list[str]] = {
     "frontier_planner": ["/frontier_goal_selector"],
     "straight_planner": ["/straight_explore_planner"],
     "object_finder": ["/object_finder"],
-    "blue_cube_grasper": ["/blue_cube_grasper"],
 }
 
 LAUNCH_MANAGED_DEFAULT = "true"
@@ -110,8 +107,6 @@ def _resolve_local_process_key(node_key: str) -> str:
         return "autonomy_core"
     if node_key == "object_finder":
         return "autonomy_perception"
-    if node_key == "blue_cube_grasper":
-        return "autonomy_blue_grasp"
     return node_key
 
 
@@ -171,21 +166,6 @@ def _local_launch_spec(node_key: str, params: Dict[str, object]) -> tuple[str, l
             "target_frame",
             "base_frame",
             "publish_debug",
-            "show_debug_window",
-        ):
-            if key in params:
-                args.append(f"{key}:={params[key]}")
-        return process_key, ["roslaunch", "limo_rosa_bridge", launch_file] + args
-
-    if process_key == "autonomy_blue_grasp":
-        launch_file = LAUNCH_FILES["autonomy_blue_grasp"]
-        args = []
-        for key in (
-            "stable_hits",
-            "depth_min",
-            "depth_max",
-            "min_area_px",
-            "base_frame",
             "show_debug_window",
         ):
             if key in params:
