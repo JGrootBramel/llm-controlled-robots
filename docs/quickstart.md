@@ -91,3 +91,5 @@ docker exec -it limo_sim bash
 ```
 
 You can find some simple commands how to control the arm and the base seperately in this [simple controls examples](./simple_control_examples.md)  file.
+
+For automated pytest tiers (unit, ROS graph, ROSA, E2E), see [tooling/automated_testing.md](tooling/automated_testing.md).

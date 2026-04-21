@@ -6,7 +6,6 @@ Robot-side runs perception; remote calls services/topics per communication-optio
 """
 
 from __future__ import annotations
-from asyncio import subprocess
 
 import rospy
 from langchain.tools import tool

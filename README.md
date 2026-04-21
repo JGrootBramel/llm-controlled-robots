@@ -132,6 +132,17 @@ cd ~/llm-controlled-robots
 python src/launch_rosa.py
 ```
 
+### Automated tests
+
+From the repo root, install dev dependencies and run the fast **unit** suite (no real ROS required):
+
+```bash
+pip install -r requirements-dev.txt
+pytest -m unit -v
+```
+
+See [docs/tooling/automated_testing.md](docs/tooling/automated_testing.md) for ROS graph, ROSA, and E2E tiers (local or Docker).
+
 ### Sync code to robot over SSH (offline robot)
 
 If the robot has no internet but is reachable on your private network, use:
