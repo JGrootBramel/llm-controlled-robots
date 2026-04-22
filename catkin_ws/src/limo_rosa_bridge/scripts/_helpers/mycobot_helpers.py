@@ -78,12 +78,12 @@ def clamp_grasp_coords_mm(
 # into a single source of truth.
 GRASP_RXRYRZ: Tuple[float, float, float] = (-110.0, 45.0, 165.0)
 HOME_ANGLES: Tuple[float, float, float, float, float, float] = (
-    -77.0,
-    -50.0,
-    -40.0,
-    100.0,
-    -5.0,
-    52.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
 )
 # Left-side tray drop pose (end of the place maneuver moves the cube over
 # the side container on the LIMO Cobot).
