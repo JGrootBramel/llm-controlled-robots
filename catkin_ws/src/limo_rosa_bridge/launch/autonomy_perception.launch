@@ -1,22 +1,24 @@
 <launch>
-  <!-- On-demand heavy perception stack -->
-  <arg name="prompt" default="a water bottle" />
-  <arg name="threshold" default="0.15" />
-  <arg name="min_hits" default="3" />
+  <!-- Red cube detector (pure perception). -->
+  <arg name="rgb_topic" default="/camera/color/image_raw" />
+  <arg name="depth_topic" default="/camera/depth/image_raw" />
+  <arg name="info_topic" default="/camera/color/camera_info" />
   <arg name="target_frame" default="map" />
   <arg name="base_frame" default="base_link" />
-  <arg name="publish_debug" default="true" />
-  <arg name="show_debug_window" default="true" />
-  <arg name="debug_window_name" default="object_finder_debug" />
+  <arg name="camera_frame" default="camera_depth_optical_frame" />
+  <arg name="publish_debug" default="false" />
+  <arg name="min_area_px" default="50" />
+  <arg name="max_area_px" default="4000" />
 
-  <node pkg="limo_rosa_bridge" type="object_finder_node.py" name="object_finder" output="screen">
-    <param name="prompt" value="$(arg prompt)" />
-    <param name="threshold" value="$(arg threshold)" />
-    <param name="min_hits" value="$(arg min_hits)" />
+  <node pkg="limo_rosa_bridge" type="red_cube_detector_node.py" name="red_cube_detector" output="screen">
+    <param name="rgb_topic" value="$(arg rgb_topic)" />
+    <param name="depth_topic" value="$(arg depth_topic)" />
+    <param name="info_topic" value="$(arg info_topic)" />
     <param name="target_frame" value="$(arg target_frame)" />
     <param name="base_frame" value="$(arg base_frame)" />
+    <param name="camera_frame" value="$(arg camera_frame)" />
     <param name="publish_debug" value="$(arg publish_debug)" />
-    <param name="show_debug_window" value="$(arg show_debug_window)" />
-    <param name="debug_window_name" value="$(arg debug_window_name)" />
+    <param name="min_area_px" value="$(arg min_area_px)" />
+    <param name="max_area_px" value="$(arg max_area_px)" />
   </node>
 </launch>

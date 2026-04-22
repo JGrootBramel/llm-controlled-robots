@@ -36,6 +36,9 @@ services:
     expose:
       - "11311"   # ROS master
       - "9090"    # rosbridge
+    # Publish roscore to the host so pytest / rostopic on the machine running Docker can use ROS_MASTER_URI=http://127.0.0.1:11311
+    ports:
+      - "11311:11311"
     # Using xvfb-run to fake a display and prevent GUI crashes
     command: >
       bash -lc "source /root/catkin_ws/devel/setup.bash &&

@@ -1,52 +1,71 @@
+"""ROSA tool wrappers for the refactored LIMO autonomy stack.
+
+Each tool is a thin rospy client around a service or topic exposed by the
+robot-side nodes (see ``catkin_ws/src/limo_rosa_bridge/scripts/*``). The
+robot's launch files bring those nodes up; we don't spawn processes from
+the remote PC anymore.
+
+Modules:
+
+- ``motion``       — ``turn_in_place``, ``drive_distance`` over ``/cmd_vel``
+- ``navigation``   — exploration enable/reset, ``move_base`` goal publish
+- ``perception``   — red cube detector enable/snapshot + pose read
+- ``manipulation`` — approach/pick/place/home triggers
+- ``mission``      — ``fetch_red_cubes`` end-to-end composition
+- ``diagnostics``  — status + hard stop
 """
-ROSA tools (capability wrappers) for LIMO cobot.
 
-Structured per docs/project-structure.md and docs/architecture/architecture-robot-remote.md:
-- motion: base velocity /cmd_vel (turn, drive)
-- navigation: exploration, coverage, planners
-- perception: object detection and finder
-- diagnostics: status, stop nodes
-
-All communication uses rospy (native ROS1) per communication-options_robot-remote_pc.md.
-"""
-
-from .diagnostics import get_autonomy_status, stop_autonomy_nodes
+from .diagnostics import get_autonomy_status, halt_robot, stop_autonomy_nodes
+from .manipulation import (
+    approach_object,
+    arm_go_home,
+    cancel_approach,
+    pick_object,
+    place_object,
+)
+from .mission import fetch_red_cubes
 from .motion import drive_distance, turn_in_place
 from .navigation import (
-    reset_cam_coverage,
-    start_cam_coverage_node,
-    start_frontier_planner_node,
-    start_straight_planner_node,
-    start_mapping_exploration,
-    stop_exploration,
-    set_exploration_enabled,
+    cancel_navigation,
     go_to_map_pose,
+    reset_cam_coverage,
+    reset_exploration,
+    start_exploration,
+    stop_exploration,
 )
 from .perception import (
-    grasp_detected_object,
-    start_object_finder_node,
-    update_object_query,
-    show_camera_feed
-)
-from .cubes import (
-    scan_for_objects,
+    enable_red_cube_detector,
+    get_latest_red_cube,
+    is_red_cube_found,
+    snapshot_red_cube,
 )
 
 __all__ = [
+    # motion
     "turn_in_place",
     "drive_distance",
-    "start_cam_coverage_node",
+    # navigation
+    "start_exploration",
+    "stop_exploration",
+    "reset_exploration",
     "reset_cam_coverage",
-    "start_straight_planner_node",
-    "start_object_finder_node",
-    "grasp_detected_object",
-    "update_object_query",
+    "go_to_map_pose",
+    "cancel_navigation",
+    # perception
+    "enable_red_cube_detector",
+    "snapshot_red_cube",
+    "get_latest_red_cube",
+    "is_red_cube_found",
+    # manipulation
+    "approach_object",
+    "cancel_approach",
+    "pick_object",
+    "place_object",
+    "arm_go_home",
+    # mission
+    "fetch_red_cubes",
+    # diagnostics
+    "halt_robot",
     "stop_autonomy_nodes",
     "get_autonomy_status",
-    "start_mapping_exploration",
-    "set_exploration_enabled",
-    "show_camera_feed",
-    "stop_exploration",
-    "go_to_map_pose",
-    "scan_for_objects",
 ]

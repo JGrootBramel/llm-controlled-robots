@@ -56,27 +56,35 @@ if not OPENAI_API_KEY:
 # Create an LLM client for ROSA; allow overriding model via ROSA_MODEL env var
 llm = ChatOpenAI(model=os.environ.get("ROSA_MODEL", "gpt-4o"), temperature=0, api_key=OPENAI_API_KEY)
 
-# Instantiate ROSA and tell it to load tools from the local `tools` package
+_REFACTORED_TOOLS = [
+    turn_in_place,
+    drive_distance,
+    start_exploration,
+    stop_exploration,
+    reset_exploration,
+    reset_cam_coverage,
+    go_to_map_pose,
+    cancel_navigation,
+    enable_red_cube_detector,
+    snapshot_red_cube,
+    get_latest_red_cube,
+    is_red_cube_found,
+    approach_object,
+    cancel_approach,
+    pick_object,
+    place_object,
+    arm_go_home,
+    fetch_red_cubes,
+    halt_robot,
+    get_autonomy_status,
+]
+
 agent = ROSA(
     ros_version=1,
     llm=llm,
-    tools=[
-        turn_in_place,
-        get_autonomy_status,
-        reset_cam_coverage,
-        start_cam_coverage_node,
-        start_frontier_planner_node,
-        start_object_finder_node,
-        grasp_detected_object,
-        scan_for_objects,
-        start_straight_planner_node,
-        stop_autonomy_nodes,
-        update_object_query,
-#        show_camera_feed,           
-#        start_mapping_exploration 
-    ],          # <-- force include your tool
-    tool_packages=["tools"],        # optional; keep if you want package discovery too
-    blacklist=["rosservice_list"],  # <-- disable the buggy tool
+    tools=_REFACTORED_TOOLS,
+    tool_packages=["tools"],
+    blacklist=["rosservice_list"],
     streaming=False,
     verbose=True,
 )
@@ -87,24 +95,10 @@ print("ROSA init signature:", inspect.signature(ROSA.__init__))
 print("ROSA __tools type:", type(agent._ROSA__tools))
 print("ROSA __tools:", agent._ROSA__tools)
 tools_obj = agent._get_tools(
-    ros_version=1, 
-    packages=["tools"], 
-    tools=[
-        turn_in_place,
-        get_autonomy_status,
-        reset_cam_coverage,
-        start_cam_coverage_node,
-        start_frontier_planner_node,
-        start_object_finder_node,
-        grasp_detected_object,
-        scan_for_objects,
-        start_straight_planner_node,
-        stop_autonomy_nodes,
-        update_object_query,
-#        show_camera_feed,           
-#        start_mapping_exploration
-    ],
-    blacklist=[]
+    ros_version=1,
+    packages=["tools"],
+    tools=_REFACTORED_TOOLS,
+    blacklist=[],
 )
 print("ROSA _get_tools():", tools_obj)
 for attr in ("tools", "_tools", "langchain_tools"):

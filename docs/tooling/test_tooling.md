@@ -2,6 +2,8 @@
 
 This guide explains how to test the ROSA tooling workflow end-to-end for the LIMO cobot project.
 
+**See also:** [Automated testing (pytest)](automated_testing.md) — unit, ROS graph, ROSA, and E2E tiers run with `pytest` (CI runs fast unit tests by default).
+
 ## Prerequisites
 
 - ROS master is running and reachable (`ROS_MASTER_URI` set correctly).

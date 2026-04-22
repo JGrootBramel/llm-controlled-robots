@@ -1,11 +1,10 @@
 <launch>
+    <!-- Vendor stacks. -->
     <include file="$(find limo_bringup)/launch/limo_start.launch" />
-
     <include file="$(find limo_bringup)/launch/limo_gmapping.launch" />
-
     <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
 
-    <!-- Astra Pro: 320x200 @ 10 Hz -->
+    <!-- Astra Pro camera -->
     <include file="$(find astra_camera)/launch/astra_pro.launch">
       <arg name="enable_depth" value="true" />
       <arg name="depth_align" value="false" />
@@ -21,12 +20,11 @@
       <arg name="uvc_camera_format" value="RGB888" />
     </include>
 
+    <!-- Talk to the remote PC / ROSA. -->
     <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" />
 
-    <include file="$(find limo_rosa_bridge)/launch/autonomy_core.launch">
-      <arg name="use_frontier_planner" value="false" />
-      <arg name="use_straight_planner" value="false" />
-    </include>
-
+    <!-- Autonomy (refactored): exploration, perception, manipulation. -->
+    <include file="$(find limo_rosa_bridge)/launch/autonomy_core.launch" />
     <include file="$(find limo_rosa_bridge)/launch/autonomy_perception.launch" />
+    <include file="$(find limo_rosa_bridge)/launch/autonomy_manipulation.launch" />
 </launch>

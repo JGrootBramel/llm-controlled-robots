@@ -1,38 +1,54 @@
 #!/usr/bin/env python3
-"""
-Re-export ROSA tools from limo_llm_control.tools (canonical location).
+"""Re-export ROSA tools from ``limo_llm_control.tools``.
 
-This package exists for backward compatibility. New code should use
-limo_llm_control.tools and run via `python -m limo_llm_control.main`.
-All tools use rospy for communication (see docs/architecture/communication-options_robot-remote_pc.md).
+Kept for backwards compatibility with scripts that do ``from tools import *``.
+New code should import from ``limo_llm_control.tools`` directly.
 """
 
 from limo_llm_control.tools import (
+    approach_object,
+    arm_go_home,
+    cancel_approach,
+    cancel_navigation,
     drive_distance,
-    grasp_detected_object,
+    enable_red_cube_detector,
+    fetch_red_cubes,
     get_autonomy_status,
+    get_latest_red_cube,
+    go_to_map_pose,
+    halt_robot,
+    is_red_cube_found,
+    pick_object,
+    place_object,
     reset_cam_coverage,
-    start_cam_coverage_node,
-    start_frontier_planner_node,
-    start_object_finder_node,
-    start_straight_planner_node,
+    reset_exploration,
+    snapshot_red_cube,
+    start_exploration,
     stop_autonomy_nodes,
+    stop_exploration,
     turn_in_place,
-    update_object_query,
-    scan_for_objects,
 )
 
 __all__ = [
     "turn_in_place",
     "drive_distance",
-    "start_cam_coverage_node",
+    "start_exploration",
+    "stop_exploration",
+    "reset_exploration",
     "reset_cam_coverage",
-    "start_frontier_planner_node",
-    "start_straight_planner_node",
-    "start_object_finder_node",
-    "grasp_detected_object",
-    "update_object_query",
+    "go_to_map_pose",
+    "cancel_navigation",
+    "enable_red_cube_detector",
+    "snapshot_red_cube",
+    "get_latest_red_cube",
+    "is_red_cube_found",
+    "approach_object",
+    "cancel_approach",
+    "pick_object",
+    "place_object",
+    "arm_go_home",
+    "fetch_red_cubes",
+    "halt_robot",
     "stop_autonomy_nodes",
     "get_autonomy_status",
-    "scan_for_objects",
 ]
