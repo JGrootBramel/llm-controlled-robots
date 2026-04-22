@@ -49,4 +49,35 @@ echo "Updating robot working tree to '${ROBOT_BRANCH}'..."
 ssh "${ROBOT_USER}@${ROBOT_HOST}" \
   "cd '${REMOTE_WORKTREE_PATH}' && git checkout '${ROBOT_BRANCH}' && git merge --ff-only '${SYNC_BRANCH}' && git branch -D '${SYNC_BRANCH}'"
 
+echo "Shutting down ROS, rebuilding catkin_ws, and relaunching rosa_bridge on robot..."
+echo "(rosa_bridge.launch will run in the foreground. Press Ctrl-C to stop it.)"
+ssh -t "${ROBOT_USER}@${ROBOT_HOST}" bash <<EOF
+set -e
+
+# Point GUI nodes (RViz) at the robot's local X server so they show up
+# on the robot's own monitor. Non-interactive SSH shells don't inherit
+# these from the desktop session, so we set them explicitly.
+export DISPLAY="\${DISPLAY:-:0}"
+export XAUTHORITY="\${XAUTHORITY:-/home/${ROBOT_USER}/.Xauthority}"
+
+if [ -f /opt/ros/noetic/setup.bash ]; then
+  source /opt/ros/noetic/setup.bash
+fi
+
+echo "Stopping any running ROS processes..."
+pkill -f roslaunch   2>/dev/null || true
+pkill -f rosmaster   2>/dev/null || true
+pkill -f rosout      2>/dev/null || true
+pkill -f 'python.*ros' 2>/dev/null || true
+sleep 2
+
+echo "Building catkin workspace..."
+cd '${REMOTE_WORKTREE_PATH}/catkin_ws'
+catkin_make
+source devel/setup.bash
+
+echo "Launching rosa_bridge.launch..."
+exec roslaunch limo_rosa_bridge rosa_bridge.launch
+EOF
+
 echo "Sync complete."
