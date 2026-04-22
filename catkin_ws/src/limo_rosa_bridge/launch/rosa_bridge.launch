@@ -5,7 +5,7 @@
 
     <!-- Vendor stacks. -->
     <include file="$(find limo_bringup)/launch/limo_start.launch" />
-    <include file="$(find limo_bringup)/launch/limo_gmapping.launch" />
+    <include file="$(find limo_rosa_bridge)/launch/limo_gmapping_no_rviz.launch" />
     <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
 
     <!-- Astra Pro camera
@@ -34,6 +34,5 @@
     <include file="$(find limo_rosa_bridge)/launch/autonomy_manipulation.launch" />
 
     <!-- Explicit RViz launch so we always use the intended config. -->
-    <!-- Use canonical node name so this instance replaces default vendor RViz if present. -->
-    <node if="$(arg start_rviz)" pkg="rviz" type="rviz" name="rviz" args="-d $(arg rviz_config)" output="screen" />
+    <node if="$(arg start_rviz)" pkg="rviz" type="rviz" name="rviz_rosa" args="-d $(arg rviz_config)" output="screen" />
 </launch>
