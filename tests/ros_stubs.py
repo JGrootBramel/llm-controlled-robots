@@ -182,9 +182,25 @@ def install() -> None:
     class Trigger:
         pass
 
+    class TriggerResponse:
+        def __init__(self, success: bool = True, message: str = "") -> None:
+            self.success = success
+            self.message = message
+
+    class SetBool:
+        pass
+
+    class SetBoolResponse:
+        def __init__(self, success: bool = True, message: str = "") -> None:
+            self.success = success
+            self.message = message
+
     std_srvs = types.ModuleType("std_srvs.srv")
     std_srvs.Empty = Empty
     std_srvs.Trigger = Trigger
+    std_srvs.TriggerResponse = TriggerResponse
+    std_srvs.SetBool = SetBool
+    std_srvs.SetBoolResponse = SetBoolResponse
     sys.modules["std_srvs"] = types.ModuleType("std_srvs")
     sys.modules["std_srvs.srv"] = std_srvs
 
@@ -192,10 +208,45 @@ def install() -> None:
     class GoalID:
         pass
 
+    class GoalStatusArray:
+        pass
+
+    class GoalStatus:
+        SUCCEEDED = 3
+        ABORTED = 4
+        REJECTED = 5
+
     actionlib_msgs = types.ModuleType("actionlib_msgs.msg")
     actionlib_msgs.GoalID = GoalID
+    actionlib_msgs.GoalStatusArray = GoalStatusArray
+    actionlib_msgs.GoalStatus = GoalStatus
     sys.modules["actionlib_msgs"] = types.ModuleType("actionlib_msgs")
     sys.modules["actionlib_msgs.msg"] = actionlib_msgs
+
+    # --- visualization_msgs.msg ---
+    class Marker:
+        CUBE = 1
+        ADD = 0
+        DELETE = 2
+
+        def __init__(self) -> None:
+            self.header = SimpleNamespace(stamp=None, frame_id="")
+            self.ns = ""
+            self.id = 0
+            self.type = 0
+            self.action = 0
+            self.pose = SimpleNamespace(
+                position=SimpleNamespace(x=0.0, y=0.0, z=0.0),
+                orientation=SimpleNamespace(x=0.0, y=0.0, z=0.0, w=1.0),
+            )
+            self.scale = SimpleNamespace(x=0.0, y=0.0, z=0.0)
+            self.color = SimpleNamespace(r=0.0, g=0.0, b=0.0, a=1.0)
+            self.lifetime = Duration(0.0)
+
+    vis = types.ModuleType("visualization_msgs.msg")
+    vis.Marker = Marker
+    sys.modules["visualization_msgs"] = types.ModuleType("visualization_msgs")
+    sys.modules["visualization_msgs.msg"] = vis
 
     # --- tf.transformations ---
     def quaternion_from_euler(roll: float, pitch: float, yaw: float) -> tuple:

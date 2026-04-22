@@ -24,29 +24,46 @@ Use this to document placement: robot vs remote PC, processes, and network conne
 ```mermaid
 flowchart LR
   subgraph Robot["LIMO Cobot (ROS1 Noetic, Python 3.8)"]
-    R1[Drivers: base, arm, gripper]
-    R2[Sensors: camera, lidar, imu]
-    R3[Localization/SLAM optional]
-    R4[Perception: object detection, tracking]
-    R5[Control Interfaces: cmd_vel, actions, services]
-    RM[(roscore / ROS Master)]
+    Drivers[limo_bringup + astra_camera + pymycobot]
+    Nav[gmapping / amcl + move_base]
+    CAM[cam_coverage_node]
+    FX[frontier_explorer_node]
+    RCD[red_cube_detector_node]
+    APP[approach_object_node]
+    ARM[arm_control_node]
+    BRIDGE[rosbridge_server]
+    RM[(roscore)]
   end
 
   subgraph Remote["Remote PC (Python 3.9+, ROSA + LLM)"]
-    P1[ROSA Tools: task-level skills]
-    P2[LLM Orchestrator: ChatGPT integration]
-    P3[Monitoring/UI: rqt, rviz, logs]
+    ROSA[ROSA tools: motion, navigation, perception, manipulation, mission]
+    LLM[LLM orchestrator]
+    UI[rviz / logs / rqt]
   end
 
-  Remote ---| Network | Robot
-  P1 -->|ROS interfaces| R5
-  P3 -->|visualization| R2
-  R1 --- RM
-  R2 --- RM
-  R3 --- RM
-  R4 --- RM
-  R5 --- RM
+  Remote ---|network| Robot
+  ROSA -->|std_srvs.SetBool| FX
+  ROSA -->|std_srvs.Trigger| APP
+  ROSA -->|std_srvs.Trigger| ARM
+  ROSA -->|std_srvs.SetBool / Trigger| RCD
+  ROSA -->|PoseStamped| Nav
+  CAM --> FX
+  FX --> Nav
+  RCD --> APP
+  RCD --> ARM
+  APP --> Nav
+  ARM --> Drivers
+  Drivers --- RM
+  Nav --- RM
+  CAM --- RM
+  FX --- RM
+  RCD --- RM
+  APP --- RM
+  ARM --- RM
+  BRIDGE --- RM
 ```
+
+See [`node-contracts.md`](./node-contracts.md) for the full per-node API.
 
 ## Component Placement (Guideline)
 **Prefer on the Robot** (or on a nearby compute node on the same LAN using native ROS)

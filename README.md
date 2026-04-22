@@ -87,7 +87,22 @@ This starts:
 - `limo_gmapping.launch` (online SLAM, publishes `/map`)
 - `limo_move_base.launch` (navigation)
 - Camera + rosbridge
-- Core autonomy nodes (`autonomy_core.launch`, `autonomy_perception.launch`)
+- The three refactored autonomy stacks:
+  - `autonomy_core.launch` — `cam_coverage_node` + `frontier_explorer_node`
+  - `autonomy_perception.launch` — `red_cube_detector_node`
+  - `autonomy_manipulation.launch` — `approach_object_node` + `arm_control_node`
+
+From the remote PC you can then trigger the full test mission with a
+single ROSA call (see
+[docs/rosa/mission-fetch-red-cubes.md](docs/rosa/mission-fetch-red-cubes.md)):
+
+```python
+from limo_llm_control.tools import fetch_red_cubes
+fetch_red_cubes(delivery_x=1.0, delivery_y=0.0, delivery_yaw_deg=0.0)
+```
+
+Per-node topics and services are documented in
+[docs/architecture/node-contracts.md](docs/architecture/node-contracts.md).
 
 ### Static map navigation (saved map + AMCL)
 

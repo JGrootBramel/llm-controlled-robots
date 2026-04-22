@@ -1,238 +1,111 @@
-"""
-Navigation tools: exploration and coverage (rospy).
+"""Navigation ROSA tools: thin rospy clients around robot-side services.
 
-Start/stop nodes that publish goals to move_base and manage camera coverage.
-Robot-side runs move_base and perception; remote calls capabilities and services.
+The robot brings up its own autonomy stack via launch files (see
+``limo_rosa_bridge/launch/rosa_bridge.launch``). These tools only talk to
+that stack over topics/services. No subprocess spawning, no SSH.
 """
 
 from __future__ import annotations
-import subprocess
-from time import time
-import os
 
-from langchain.tools import tool
-import json
+import math
+
 import rospy
 from actionlib_msgs.msg import GoalID
-from geometry_msgs.msg import Twist, PoseStamped
-from std_msgs.msg import Bool
+from geometry_msgs.msg import PoseStamped, Twist
+from langchain.tools import tool
+from std_srvs.srv import Empty, SetBool, Trigger
 from tf.transformations import quaternion_from_euler
 
 from ..ros_clients import ensure_rospy
-from . import _node_runner as runner
-
-@tool
-def start_cam_coverage_node(
-    range_m: float = 1.5,
-    map_topic: str = "/map",
-    coverage_topic: str = "/cam_coverage",
-    frame_camera: str = "camera_link",
-    camera_info_topic: str = "/camera/color/camera_info",
-) -> str:
-    """
-    Start the camera coverage mapping node (raycasts camera FOV into seen/unseen grid).
-
-    Wraps cam_coverage.py. Publishes OccupancyGrid with seen=100, unseen=-1.
-
-    Args:
-        range_m: Max raycast range in meters (0.1..10.0).
-        map_topic: Static/SLAM map topic.
-        coverage_topic: Output topic for accumulated camera coverage.
-        frame_camera: TF camera frame for ray origins.
-        camera_info_topic: CameraInfo for FOV.
-    """
-    err = runner.validate_float("range_m", range_m, 0.1, 10.0)
-    if err:
-        return err
-    if not map_topic.strip() or not coverage_topic.strip() or not frame_camera.strip():
-        return "Invalid topic/frame arguments: empty strings are not allowed."
-    params = {
-        "range_m": float(range_m),
-        "map_topic": map_topic.strip(),
-        "coverage_topic": coverage_topic.strip(),
-        "frame_camera": frame_camera.strip(),
-        "camera_info_topic": camera_info_topic.strip(),
-    }
-    return runner.spawn_node("cam_coverage", params)
 
 
-@tool
-def reset_cam_coverage() -> str:
-    """
-    Reset the accumulated camera coverage map (calls /cam_coverage/reset via rospy).
-    """
+_EXPLORATION_ENABLE_SRV = "/exploration_enabled"
+_EXPLORATION_RESET_SRV = "/exploration_reset"
+_CAM_COVERAGE_RESET_SRV = "/cam_coverage/reset"
+
+
+def _call_set_bool(service_name: str, value: bool, timeout: float = 2.0) -> str:
     ensure_rospy()
-    return runner.call_reset_cam_coverage()
+    try:
+        rospy.wait_for_service(service_name, timeout=timeout)
+    except Exception:
+        return (
+            f"Service '{service_name}' is unavailable. Is the robot autonomy stack running?"
+        )
+    try:
+        proxy = rospy.ServiceProxy(service_name, SetBool)
+        resp = proxy(bool(value))
+        prefix = "OK" if resp.success else "FAIL"
+        return f"{prefix}: {resp.message}"
+    except Exception as exc:
+        return f"Call to {service_name} failed: {exc}"
+
+
+def _call_trigger(service_name: str, timeout: float = 2.0) -> str:
+    ensure_rospy()
+    try:
+        rospy.wait_for_service(service_name, timeout=timeout)
+    except Exception:
+        return f"Service '{service_name}' is unavailable."
+    try:
+        proxy = rospy.ServiceProxy(service_name, Trigger)
+        resp = proxy()
+        prefix = "OK" if resp.success else "FAIL"
+        return f"{prefix}: {resp.message}"
+    except Exception as exc:
+        return f"Call to {service_name} failed: {exc}"
+
+
+# --------------------------------------------------------------- exploration
 
 
 @tool
-def start_frontier_planner_node(
-    coverage_topic: str = "/cam_coverage",
-    goal_topic: str = "/move_base_simple/goal",
-    global_costmap_topic: str = "/move_base/global_costmap/costmap",
-    min_frontier_dist_m: float = 0.3,
-    safety_radius_m: float = 0.2,
-    strategy: str = "closest",
-) -> str:
+def start_exploration() -> str:
+    """Resume frontier exploration on the robot.
+
+    Calls ``/exploration_enabled`` (``std_srvs/SetBool``) with ``data=True``
+    so the ``frontier_explorer`` node on the robot re-starts picking goals
+    and publishing them to ``move_base``.
     """
-    Start the frontier-based exploration planner node.
-
-    Wraps frontier_planner.py: selects frontier goals from coverage + costmap.
-
-    Args:
-        coverage_topic: Input camera coverage topic.
-        goal_topic: Published exploration goal topic.
-        global_costmap_topic: move_base global costmap.
-        min_frontier_dist_m: Minimum robot-to-frontier distance (m).
-        safety_radius_m: Local clearance check radius (m).
-        strategy: Candidate ordering strategy.
-    """
-    err1 = runner.validate_float("min_frontier_dist_m", min_frontier_dist_m, 0.0, 5.0)
-    err2 = runner.validate_float("safety_radius_m", safety_radius_m, 0.05, 2.0)
-    if err1:
-        return err1
-    if err2:
-        return err2
-    if not coverage_topic.strip() or not goal_topic.strip() or not global_costmap_topic.strip():
-        return "Invalid topic arguments: empty strings are not allowed."
-    params = {
-        "coverage_topic": coverage_topic.strip(),
-        "goal_topic": goal_topic.strip(),
-        "global_costmap_topic": global_costmap_topic.strip(),
-        "min_frontier_dist_m": float(min_frontier_dist_m),
-        "safety_radius_m": float(safety_radius_m),
-        "strategy": strategy.strip() if strategy else "closest",
-    }
-    return runner.spawn_node("frontier_planner", params)
-
-
-@tool
-def start_straight_planner_node(
-    coverage_topic: str = "/cam_coverage",
-    goal_topic: str = "/move_base_simple/goal",
-    global_costmap_topic: str = "/move_base/global_costmap/costmap",
-    replan_period_s: float = 2.0,
-    segment_max_len_m: float = 3.0,
-    min_forward_free_m: float = 0.4,
-    heading_samples: int = 16,
-) -> str:
-    """
-    Start the straight-segment exploration planner node.
-
-    Wraps straight_planner.py: drives straight until blocked, then picks new headings.
-
-    Args:
-        coverage_topic: Input camera coverage topic.
-        goal_topic: Goal output topic.
-        global_costmap_topic: Global costmap topic.
-        replan_period_s: Planner timer period (s).
-        segment_max_len_m: Max straight segment length (m).
-        min_forward_free_m: Required free distance to keep heading (m).
-        heading_samples: Number of heading candidates over 360°.
-    """
-    e1 = runner.validate_float("replan_period_s", replan_period_s, 0.1, 30.0)
-    e2 = runner.validate_float("segment_max_len_m", segment_max_len_m, 0.1, 20.0)
-    e3 = runner.validate_float("min_forward_free_m", min_forward_free_m, 0.05, 5.0)
-    e4 = runner.validate_int("heading_samples", heading_samples, 4, 360)
-    for err in (e1, e2, e3, e4):
-        if err:
-            return err
-    params = {
-        "coverage_topic": coverage_topic.strip(),
-        "goal_topic": goal_topic.strip(),
-        "global_costmap_topic": global_costmap_topic.strip(),
-        "replan_period": float(replan_period_s),
-        "segment_max_len": float(segment_max_len_m),
-        "min_forward_free": float(min_forward_free_m),
-        "heading_samples": int(heading_samples),
-    }
-    return runner.spawn_node("straight_planner", params)
+    return _call_set_bool(_EXPLORATION_ENABLE_SRV, True)
 
 
 @tool
 def stop_exploration() -> str:
+    """Pause frontier exploration.
+
+    Calls ``/exploration_enabled`` with ``data=False``; the explorer
+    cancels its current ``move_base`` goal and stops publishing new ones.
     """
-    Stops the autonomous exploration process completely.
-    Kills the frontier goal selector node, cancels active navigation 
-    goals, and halts the robot's motors immediately.
-    Use this when the user says 'stop exploring', 'halt exploration', or 'stop mapping'.
-    """
-    print("[TOOL] Stopping exploration forcefully...")
-    
-    # 1. Kill the "brain" that is sending new goals
-    os.system("rosnode kill /move_base")
-    
-    # 2. Apply the emergency brake for move_base and the physical motors
-    try:
-        cancel_pub = rospy.Publisher('/move_base/cancel', GoalID, queue_size=10)
-        vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
-        
-        # Wait a fraction of a second so ROS can register the publishers
-        rospy.sleep(0.2) 
-        
-        # Publish an empty GoalID to cancel all active move_base goals
-        cancel_pub.publish(GoalID())
-        
-        # Publish an empty Twist message (all zeros) to physically stop the motors
-        vel_pub.publish(Twist()) 
-        
-        return "Exploration stopped. Frontier goal selector killed, and robot halted."
-        
-    except Exception as e:
-        return f"Killed exploration node, but encountered an error halting motors: {e}"
+    return _call_set_bool(_EXPLORATION_ENABLE_SRV, False)
 
 
 @tool
-def start_mapping_exploration() -> str:
+def reset_exploration() -> str:
+    """Drop the current frontier goal and restart goal selection.
+
+    Calls ``/exploration_reset`` (``std_srvs/Trigger``).
     """
-    Starts the exploration planner directly on the robot via SSH SILENTLY.
-    ROSA must use this to start exploration without spamming the terminal.
-    """
-    workspace_setup = "~/llm-controlled-robots/catkin_ws/devel/setup.bash" 
-    
-    # Notice the '> /dev/null 2>&1 &' at the very end.
-    # This completely mutes the node and runs it in the background!
-    ssh_command = [
-        "ssh",
-        "agilex@192.168.0.105",
-        f"bash -c 'source /opt/ros/noetic/setup.bash && source {workspace_setup} && export ROS_MASTER_URI=http://localhost:11311 && rosrun limo_rosa_bridge frontier_planner_node.py _coverage_topic:=/cam_coverage > /dev/null 2>&1 &'"
-    ]
-    
-    # Fire and forget. No logs will come back to the PC terminal.
-    subprocess.Popen(ssh_command)
-    
-    return "Exploration started silently. The robot is moving. Terminal remains clean."
+    return _call_trigger(_EXPLORATION_RESET_SRV)
+
+
+# ------------------------------------------------------------ cam coverage
 
 
 @tool
-def set_exploration_enabled(enabled: bool = True) -> str:
-    """
-    Pause or resume frontier exploration without killing the planner node.
-
-    When disabled (enabled=False):
-    - Cancels the current navigation goal
-    - Stops the robot
-    - Prevents new goals from being selected
-
-    When enabled (enabled=True):
-    - Resumes exploration from the current position
-    - New frontier goals will be selected
-
-    Args:
-        enabled: True to enable/resume exploration, False to pause/stop.
-    """
+def reset_cam_coverage() -> str:
+    """Clear the accumulated camera coverage map (``/cam_coverage/reset``)."""
     ensure_rospy()
     try:
-        pub = rospy.Publisher("/exploration_enabled", Bool, queue_size=1, latch=True)
-        rospy.sleep(0.1)
-        pub.publish(Bool(data=enabled))
-        state = "enabled" if enabled else "disabled"
-        return (
-            f"Exploration {state}. Robot will "
-            f"{'resume selecting new goals' if enabled else 'stop and hold position'}."
-        )
+        rospy.wait_for_service(_CAM_COVERAGE_RESET_SRV, timeout=2.0)
+        proxy = rospy.ServiceProxy(_CAM_COVERAGE_RESET_SRV, Empty)
+        proxy()
+        return "Coverage reset."
     except Exception as exc:
-        return f"Failed to set exploration state: {exc}"
+        return f"Coverage reset failed: {exc}"
+
+
+# --------------------------------------------------- move_base single pose
 
 
 @tool
@@ -243,58 +116,26 @@ def go_to_map_pose(
     frame_id: str = "map",
     goal_topic: str = "/move_base_simple/goal",
 ) -> str:
-    """
-    Send a single navigation goal in map coordinates.
+    """Publish a single navigation goal in map coordinates.
 
-    This publishes a geometry_msgs/PoseStamped to a navigation goal topic
-    (by default /move_base_simple/goal) in the specified frame (default 'map').
-
-    Args:
-        x_m: Target x position in meters (map frame).
-        y_m: Target y position in meters (map frame).
-        yaw_deg: Target heading in degrees (0° = +X axis).
-        frame_id: Reference frame for the goal, usually 'map'.
-        goal_topic: Goal topic, typically /move_base_simple/goal or /move_base/goal bridge.
+    Sends a ``geometry_msgs/PoseStamped`` on ``goal_topic`` (default
+    ``/move_base_simple/goal``). Returns as soon as the goal is published.
     """
     ensure_rospy()
-
-    if not goal_topic.strip():
+    goal_topic = goal_topic.strip() if goal_topic else ""
+    frame_id = frame_id.strip() if frame_id else ""
+    if not goal_topic:
         return "Invalid goal_topic: empty string is not allowed."
-    if not frame_id.strip():
+    if not frame_id:
         return "Invalid frame_id: empty string is not allowed."
 
-    # #region agent log
-    try:
-        log_payload = {
-            "sessionId": "7fef08",
-            "runId": "pre-fix",
-            "hypothesisId": "H1",
-            "location": "navigation.go_to_map_pose",
-            "message": "Publishing map goal",
-            "data": {
-                "x_m": float(x_m),
-                "y_m": float(y_m),
-                "yaw_deg": float(yaw_deg),
-                "frame_id": frame_id.strip(),
-                "goal_topic": goal_topic.strip(),
-            },
-            "timestamp": int(time() * 1000),
-        }
-        with open("/home/cps-orin/llm-controlled-robots/.cursor/debug-7fef08.log", "a") as _f:
-            _f.write(json.dumps(log_payload) + "\n")
-    except Exception:
-        pass
-    # #endregion agent log
-
-    pub = rospy.Publisher(goal_topic.strip(), PoseStamped, queue_size=1)
+    pub = rospy.Publisher(goal_topic, PoseStamped, queue_size=1)
     rospy.sleep(0.2)
-
-    yaw_rad = yaw_deg * 3.141592653589793 / 180.0
+    yaw_rad = float(yaw_deg) * math.pi / 180.0
     qx, qy, qz, qw = quaternion_from_euler(0.0, 0.0, yaw_rad)
-
     goal = PoseStamped()
     goal.header.stamp = rospy.Time.now()
-    goal.header.frame_id = frame_id.strip()
+    goal.header.frame_id = frame_id
     goal.pose.position.x = float(x_m)
     goal.pose.position.y = float(y_m)
     goal.pose.position.z = 0.0
@@ -302,10 +143,26 @@ def go_to_map_pose(
     goal.pose.orientation.y = qy
     goal.pose.orientation.z = qz
     goal.pose.orientation.w = qw
-
     pub.publish(goal)
-
     return (
-        f"Published navigation goal to {goal_topic.strip()} in frame '{frame_id.strip()}' "
-        f"at (x={x_m:.2f}, y={y_m:.2f}, yaw={yaw_deg:.1f}°)."
+        f"Published goal to {goal_topic} in frame '{frame_id}' at "
+        f"(x={x_m:.2f}, y={y_m:.2f}, yaw={yaw_deg:.1f}°)."
     )
+
+
+# --------------------------------------------------- emergency halt (kept)
+
+
+@tool
+def cancel_navigation() -> str:
+    """Cancel any in-flight ``move_base`` goal and stop the wheels."""
+    ensure_rospy()
+    try:
+        cancel_pub = rospy.Publisher("/move_base/cancel", GoalID, queue_size=1)
+        vel_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
+        rospy.sleep(0.2)
+        cancel_pub.publish(GoalID())
+        vel_pub.publish(Twist())
+        return "Cancelled move_base goal and stopped the base."
+    except Exception as exc:
+        return f"cancel_navigation failed: {exc}"

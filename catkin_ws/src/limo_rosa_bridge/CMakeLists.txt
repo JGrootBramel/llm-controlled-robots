@@ -172,10 +172,18 @@ include_directories(
 ## in contrast to setup.py, you can choose the destination
 catkin_install_python(PROGRAMS
   scripts/cam_coverage_node.py
-  scripts/frontier_planner_node.py
-  scripts/straight_planner_node.py
-  scripts/object_finder_node.py
+  scripts/frontier_explorer_node.py
+  scripts/red_cube_detector_node.py
+  scripts/approach_object_node.py
+  scripts/arm_control_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+# Install pure-Python helpers alongside the scripts so ``from _helpers import ...``
+# works both for ``rosrun`` and the installed node wrappers.
+install(DIRECTORY scripts/_helpers/
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}/_helpers
+  FILES_MATCHING PATTERN "*.py"
 )
 
 ## Mark executables for installation

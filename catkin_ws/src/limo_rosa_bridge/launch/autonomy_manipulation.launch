@@ -1,0 +1,26 @@
+<launch>
+  <!-- Approach (base) + arm control (MyCobot). -->
+  <arg name="base_frame" default="base_link" />
+  <arg name="map_frame" default="map" />
+  <arg name="standoff" default="0.45" />
+  <arg name="min_standoff" default="0.35" />
+  <arg name="mycobot_port" default="/dev/ttyACM0" />
+  <arg name="mycobot_baud" default="115200" />
+  <arg name="target_pose_topic" default="/red_cubes/latest_pose" />
+
+  <node pkg="limo_rosa_bridge" type="approach_object_node.py" name="approach_object" output="screen">
+    <param name="target_topic" value="$(arg target_pose_topic)" />
+    <param name="base_frame" value="$(arg base_frame)" />
+    <param name="map_frame" value="$(arg map_frame)" />
+    <param name="standoff" value="$(arg standoff)" />
+    <param name="min_standoff" value="$(arg min_standoff)" />
+  </node>
+
+  <node pkg="limo_rosa_bridge" type="arm_control_node.py" name="arm_control" output="screen">
+    <param name="port" value="$(arg mycobot_port)" />
+    <param name="baud" value="$(arg mycobot_baud)" />
+    <param name="base_frame" value="$(arg base_frame)" />
+    <!-- Wire the detector's latched pose straight into the arm node. -->
+    <remap from="~target_pose" to="$(arg target_pose_topic)" />
+  </node>
+</launch>

@@ -1,5 +1,5 @@
 <launch>
-  <!-- Core always-on autonomy stack -->
+  <!-- Core exploration stack: camera coverage map + frontier planner. -->
   <arg name="coverage_range_m" default="1.5" />
   <arg name="camera_info_topic" default="/camera/color/camera_info" />
   <arg name="camera_frame" default="camera_link" />
@@ -9,15 +9,7 @@
   <arg name="global_costmap_topic" default="/move_base/global_costmap/costmap" />
   <arg name="min_frontier_dist_m" default="0.3" />
   <arg name="safety_radius_m" default="0.2" />
-  <arg name="strategy" default="closest" />
-  <arg name="replan_period" default="2.0" />
-  <arg name="segment_max_len" default="3.0" />
-  <arg name="min_forward_free" default="0.4" />
-  <arg name="heading_samples" default="16" />
-
-  <!-- Planner choice: enable one by default -->
-  <arg name="use_frontier_planner" default="true" />
-  <arg name="use_straight_planner" default="false" />
+  <arg name="enabled_at_start" default="true" />
 
   <node pkg="limo_rosa_bridge" type="cam_coverage_node.py" name="cam_coverage_node" output="screen">
     <param name="range_m" value="$(arg coverage_range_m)" />
@@ -27,26 +19,12 @@
     <param name="coverage_topic" value="$(arg coverage_topic)" />
   </node>
 
-  <group if="$(arg use_frontier_planner)">
-    <node pkg="limo_rosa_bridge" type="frontier_planner_node.py" name="frontier_goal_selector" output="screen">
-      <param name="coverage_topic" value="$(arg coverage_topic)" />
-      <param name="goal_topic" value="$(arg goal_topic)" />
-      <param name="global_costmap_topic" value="$(arg global_costmap_topic)" />
-      <param name="min_frontier_dist_m" value="$(arg min_frontier_dist_m)" />
-      <param name="safety_radius_m" value="$(arg safety_radius_m)" />
-      <param name="strategy" value="$(arg strategy)" />
-    </node>
-  </group>
-
-  <group if="$(arg use_straight_planner)">
-    <node pkg="limo_rosa_bridge" type="straight_planner_node.py" name="straight_explore_planner" output="screen">
-      <param name="coverage_topic" value="$(arg coverage_topic)" />
-      <param name="goal_topic" value="$(arg goal_topic)" />
-      <param name="global_costmap_topic" value="$(arg global_costmap_topic)" />
-      <param name="replan_period" value="$(arg replan_period)" />
-      <param name="segment_max_len" value="$(arg segment_max_len)" />
-      <param name="min_forward_free" value="$(arg min_forward_free)" />
-      <param name="heading_samples" value="$(arg heading_samples)" />
-    </node>
-  </group>
+  <node pkg="limo_rosa_bridge" type="frontier_explorer_node.py" name="frontier_explorer" output="screen">
+    <param name="coverage_topic" value="$(arg coverage_topic)" />
+    <param name="goal_topic" value="$(arg goal_topic)" />
+    <param name="global_costmap_topic" value="$(arg global_costmap_topic)" />
+    <param name="min_frontier_dist_m" value="$(arg min_frontier_dist_m)" />
+    <param name="safety_radius_m" value="$(arg safety_radius_m)" />
+    <param name="enabled_at_start" value="$(arg enabled_at_start)" />
+  </node>
 </launch>
