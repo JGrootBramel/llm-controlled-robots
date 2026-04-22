@@ -7,6 +7,7 @@ Panels:
         - /Map1
         - /LaserScan1
         - /Detected Objects1
+        - /Red Cube Pose1
       Splitter Ratio: 0.5
   - Class: rviz/Selection
     Name: Selection
@@ -96,6 +97,21 @@ Visualization Manager:
       Namespaces:
         detected_objects: true
       Queue Size: 100
+      Value: true
+    - Alpha: 1
+      Axes Length: 1
+      Axes Radius: 0.10000000149011612
+      Class: rviz/Pose
+      Color: 255; 25; 0
+      Enabled: true
+      Head Length: 0.30000001192092896
+      Head Radius: 0.10000000149011612
+      Name: Red Cube Pose
+      Shaft Length: 1
+      Shaft Radius: 0.05000000074505806
+      Shape: Arrow
+      Topic: /red_cubes/latest_pose
+      Unreliable: false
       Value: true
   Enabled: true
   Global Options:

@@ -1,4 +1,8 @@
 <launch>
+    <!-- RViz -->
+    <arg name="start_rviz" default="true" />
+    <arg name="rviz_config" default="$(find limo_rosa_bridge)/rviz/rosa_gmapping_markers.rviz" />
+
     <!-- Vendor stacks. -->
     <include file="$(find limo_bringup)/launch/limo_start.launch" />
     <include file="$(find limo_bringup)/launch/limo_gmapping.launch" />
@@ -28,4 +32,7 @@
     <include file="$(find limo_rosa_bridge)/launch/autonomy_core.launch" />
     <include file="$(find limo_rosa_bridge)/launch/autonomy_perception.launch" />
     <include file="$(find limo_rosa_bridge)/launch/autonomy_manipulation.launch" />
+
+    <!-- Explicit RViz launch so we always use the intended config. -->
+    <node if="$(arg start_rviz)" pkg="rviz" type="rviz" name="rviz_rosa" args="-d $(arg rviz_config)" output="screen" />
 </launch>
