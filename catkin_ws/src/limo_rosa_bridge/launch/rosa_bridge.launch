@@ -4,20 +4,21 @@
     <include file="$(find limo_bringup)/launch/limo_gmapping.launch" />
     <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
 
-    <!-- Astra Pro camera -->
+    <!-- Astra Pro camera
+         Note: Older Astra drivers on the robot are stable with MJPEG UVC color. -->
     <include file="$(find astra_camera)/launch/astra_pro.launch">
       <arg name="enable_depth" value="true" />
       <arg name="depth_align" value="false" />
       <arg name="enable_ir" value="false" />
 
       <arg name="color_width" value="640" />
-      <arg name="color_height" value="400" />
+      <arg name="color_height" value="480" />
       <arg name="color_fps" value="30" />
 
       <arg name="depth_width" value="320" />
       <arg name="depth_height" value="200" />
       <arg name="depth_fps" value="10" />
-      <arg name="uvc_camera_format" value="RGB888" />
+      <arg name="uvc_camera_format" value="mjpeg" />
     </include>
 
     <!-- Talk to the remote PC / ROSA. -->
