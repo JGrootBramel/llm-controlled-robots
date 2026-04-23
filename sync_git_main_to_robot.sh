@@ -96,18 +96,18 @@ cd '${REMOTE_WORKTREE_PATH}/catkin_ws'
 # a previous build would omit agilex_ws from the overlay chain and sourcing
 # devel/setup.bash below would wipe limo_bringup out of ROS_PACKAGE_PATH.
 catkin_make --force-cmake
+
+# Sourcing our workspace's devel/setup.bash PREPENDS our workspace while
+# preserving the agilex_ws + /home/agilex/catkin_ws chain recorded at build
+# time. Do NOT re-source agilex_ws after this -- that would wipe our
+# workspace back out of ROS_PACKAGE_PATH, because agilex_ws's recorded
+# chain was fixed years ago and cannot know about our repo.
 source devel/setup.bash
 
-# Belt-and-suspenders: re-source the AgileX workspace AFTER our own so that
-# limo_bringup / astra_camera / limo_base are guaranteed to be on
-# ROS_PACKAGE_PATH at launch time, even if the devel/setup.bash chain above
-# happens to be wrong for any reason. Safe because our catkin_ws packages
-# don't share names with anything in agilex_ws.
-source "${REMOTE_AGILEX_WS_SETUP}"
-
 echo "ROS_PACKAGE_PATH=\${ROS_PACKAGE_PATH}"
-echo "Sanity check: locating limo_bringup..."
+echo "Sanity check: locating vendor + our packages..."
 rospack find limo_bringup
+rospack find limo_rosa_bridge
 
 echo "Launching rosa_bridge.launch..."
 exec roslaunch limo_rosa_bridge rosa_bridge.launch
