@@ -14,7 +14,9 @@
   <arg name="close_in_enabled" default="true" />
   <arg name="scan_topic" default="/scan" />
   <arg name="close_in_guard_enabled" default="true" />
-  <arg name="close_in_guard_distance_m" default="0.35" />
+  <!-- Lowered from 0.35 -> 0.30 so guarded close-in can finish the last ~5 cm
+       when the support box is detected but still not in contact range. -->
+  <arg name="close_in_guard_distance_m" default="0.30" />
   <arg name="close_in_guard_half_angle_deg" default="18.0" />
   <arg name="close_in_guard_min_valid_beams" default="3" />
   <arg name="close_in_guard_scan_stale_s" default="0.5" />
