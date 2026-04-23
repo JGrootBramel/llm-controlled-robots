@@ -17,10 +17,19 @@
   <arg name="map_file"
        default="$(find limo_rosa_bridge)/maps/limo_lab_map.yaml"
        doc="Absolute path to the .yaml map descriptor consumed by map_server." />
+  <arg name="run_global_localization" default="true"
+       doc="If true, call /global_localization once after AMCL starts." />
 
   <!-- Static /map publisher -->
   <node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
 
   <!-- Adaptive Monte Carlo Localization on the static map (publishes map -> odom). -->
   <include file="$(find limo_bringup)/launch/limo_amcl.launch" />
+
+  <!-- Optionally spread AMCL particles over the full map after startup. -->
+  <node if="$(arg run_global_localization)"
+        pkg="limo_rosa_bridge"
+        type="call_global_localization_once.py"
+        name="call_global_localization_once"
+        output="screen" />
 </launch>

@@ -176,6 +176,7 @@ catkin_install_python(PROGRAMS
   scripts/red_cube_detector_node.py
   scripts/approach_object_node.py
   scripts/arm_control_node.py
+  scripts/call_global_localization_once.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
