@@ -14,6 +14,10 @@ REMOTE_REPO_PATH="/home/agilex/llm-controlled-robots/.git"
 REMOTE_WORKTREE_PATH="/home/agilex/llm-controlled-robots"
 REMOTE_NAME="robot"
 SYNC_BRANCH="sync-from-remote-main"
+# AgileX vendor workspace (limo_bringup, astra_camera, limo_base, ...). Our
+# catkin_ws overlays this. Non-interactive SSH sessions don't source the
+# robot's ~/.bashrc, so we source it explicitly below.
+REMOTE_AGILEX_WS_SETUP="/home/agilex/agilex_ws/devel/setup.bash"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -62,6 +66,20 @@ export XAUTHORITY="\${XAUTHORITY:-/home/${ROBOT_USER}/.Xauthority}"
 
 if [ -f /opt/ros/noetic/setup.bash ]; then
   source /opt/ros/noetic/setup.bash
+fi
+
+# Source the AgileX vendor workspace BEFORE building, so our workspace
+# overlays it and 'limo_bringup', 'astra_camera', etc. are resolvable
+# inside rosa_bridge.launch. Interactive shells get this from ~/.bashrc,
+# but this heredoc runs a non-interactive shell that does not.
+if [ -f "${REMOTE_AGILEX_WS_SETUP}" ]; then
+  echo "Sourcing AgileX workspace: ${REMOTE_AGILEX_WS_SETUP}"
+  source "${REMOTE_AGILEX_WS_SETUP}"
+else
+  echo "ERROR: AgileX workspace setup not found at ${REMOTE_AGILEX_WS_SETUP}"
+  echo "       limo_bringup and other vendor packages will not be found."
+  echo "       Edit REMOTE_AGILEX_WS_SETUP in sync_git_main_to_robot.sh."
+  exit 1
 fi
 
 echo "Stopping any running ROS processes..."
