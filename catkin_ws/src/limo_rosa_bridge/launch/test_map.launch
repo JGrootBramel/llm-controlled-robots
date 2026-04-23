@@ -38,6 +38,6 @@
 
   <group if="$(arg open_rviz)">
     <node name="rviz" pkg="rviz" type="rviz"
-          args="-d $(find limo_rosa_bridge)/rviz/nav.rviz" required="true" />
+          args="-d $(find limo_rosa_bridge)/rviz/rosa_gmapping_markers.rviz" required="true" />
   </group>
 </launch>

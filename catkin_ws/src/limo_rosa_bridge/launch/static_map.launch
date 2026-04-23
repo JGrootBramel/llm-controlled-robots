@@ -19,6 +19,12 @@
        doc="Absolute path to the .yaml map descriptor consumed by map_server." />
   <arg name="run_global_localization" default="true"
        doc="If true, call /global_localization once after AMCL starts." />
+  <arg name="rotate_after_global_localization" default="true"
+       doc="If true, rotate once after /global_localization to help AMCL converge." />
+  <arg name="rotation_angular_speed" default="0.4"
+       doc="In-place localization spin speed in rad/s." />
+  <arg name="rotation_duration_s" default="16.0"
+       doc="Localization spin duration in seconds (about one turn at defaults)." />
 
   <!-- Static /map publisher -->
   <node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
@@ -31,5 +37,9 @@
         pkg="limo_rosa_bridge"
         type="call_global_localization_once.py"
         name="call_global_localization_once"
-        output="screen" />
+        output="screen">
+    <param name="rotate_after_global" value="$(arg rotate_after_global_localization)" />
+    <param name="rotate_angular_speed" value="$(arg rotation_angular_speed)" />
+    <param name="rotate_duration_s" value="$(arg rotation_duration_s)" />
+  </node>
 </launch>
