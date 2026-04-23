@@ -8,25 +8,10 @@ Panels:
         - /LaserScan1
         - /Detected Objects1
         - /Red Cube Pose1
+        - /Camera Feed1
       Splitter Ratio: 0.5
-  - Class: rviz/Selection
-    Name: Selection
-  - Class: rviz/Tool Properties
-    Name: Tool Properties
-    Expanded:
-      - /2D Pose Estimate1
-      - /2D Nav Goal1
-      - /Publish Point1
-    Splitter Ratio: 0.5886790156364441
-  - Class: rviz/Views
-    Name: Views
-    Expanded:
-      - /Current View1
-    Splitter Ratio: 0.5
-  - Class: rviz/Time
-    Name: Time
-    SyncMode: 0
-    SyncSource: LaserScan
+  - Class: rviz/Image
+    Name: Image
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -113,6 +98,18 @@ Visualization Manager:
       Topic: /red_cubes/latest_pose
       Unreliable: false
       Value: true
+    - Class: rviz/Image
+      Enabled: true
+      Image Topic: /camera/color/image_raw/image
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Name: Camera Feed
+      Normalize Range: true
+      Queue Size: 2
+      Transport Hint: raw
+      Unreliable: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -156,7 +153,7 @@ Window Geometry:
   Hide Left Dock: false
   Hide Right Dock: false
   QMainWindow State: 000000ff00000000fd0000000400000000000001d600000371fc0200000008fb000000100044006900730070006c0061007900730100000028000001c8000000d700fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007301000001f6000001a10000018500fffffffb0000001200530065006c0065006300740069006f006e010000039d000000950000009500fffffffb0000000a0056006900650077007301000004320000008d000000ad00fffffffb0000001200540069006d00650001000004c5000000d3000000a400ffffff000000010000013000000371fc0200000001fb0000000a0049006d0061006700650100000000000003710000001600ffffff000000000000000000000004000000040000000800000008fc00000000
-  Selection:
+  Image:
     collapsed: false
   Time:
     collapsed: false
