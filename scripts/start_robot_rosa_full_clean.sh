@@ -28,6 +28,14 @@ else
   exit 1
 fi
 
+# Ensure ROS XML-RPC endpoint addresses are reachable from remote clients.
+ROBOT_LAN_IP="$(hostname -I | awk '{print $1}')"
+if [[ -n "${ROBOT_LAN_IP}" ]]; then
+  export ROS_IP="${ROS_IP:-${ROBOT_LAN_IP}}"
+  export ROS_HOSTNAME="${ROS_HOSTNAME:-${ROS_IP}}"
+  echo "[start_robot_rosa_full_clean] ROS_IP=${ROS_IP} ROS_HOSTNAME=${ROS_HOSTNAME}"
+fi
+
 cd "${REPO_ROOT}/catkin_ws"
 if [[ ! -f "devel/setup.bash" ]]; then
   echo "ERROR: catkin workspace not built at ${REPO_ROOT}/catkin_ws" >&2

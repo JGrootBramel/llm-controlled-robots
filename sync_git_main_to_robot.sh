@@ -99,6 +99,16 @@ set -e
 export DISPLAY="\${DISPLAY:-:0}"
 export XAUTHORITY="\${XAUTHORITY:-/home/${ROBOT_USER}/.Xauthority}"
 
+# Ensure ROS node/service XML-RPC URIs are reachable from remote clients.
+# If ROS_HOSTNAME is left as an unresolvable alias (e.g. "master"), tools can
+# see topics/services in the graph but fail to connect to their endpoints.
+ROBOT_LAN_IP="\$(hostname -I | awk '{print \$1}')"
+if [ -n "\${ROBOT_LAN_IP}" ]; then
+  export ROS_IP="\${ROS_IP:-\${ROBOT_LAN_IP}}"
+  export ROS_HOSTNAME="\${ROS_HOSTNAME:-\${ROS_IP}}"
+  echo "Using robot ROS network identity: ROS_IP=\${ROS_IP} ROS_HOSTNAME=\${ROS_HOSTNAME}"
+fi
+
 if [ -f /opt/ros/noetic/setup.bash ]; then
   source /opt/ros/noetic/setup.bash
 fi
