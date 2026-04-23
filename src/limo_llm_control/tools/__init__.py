@@ -15,7 +15,12 @@ Modules:
 - ``diagnostics``  — status + hard stop
 """
 
-from .diagnostics import get_autonomy_status, halt_robot, stop_autonomy_nodes
+from .diagnostics import (
+    get_autonomy_status,
+    halt_robot,
+    healthcheck_autonomy_stack,
+    stop_autonomy_nodes,
+)
 from .manipulation import (
     approach_object,
     arm_go_home,
@@ -74,4 +79,5 @@ __all__ = [
     "halt_robot",
     "stop_autonomy_nodes",
     "get_autonomy_status",
+    "healthcheck_autonomy_stack",
 ]

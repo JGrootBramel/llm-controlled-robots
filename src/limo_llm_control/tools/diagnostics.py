@@ -39,6 +39,31 @@ _KEY_TOPICS = [
     "/cam_coverage",
 ]
 
+_HEALTH_REQUIRED_SERVICES = [
+    "/exploration_enabled",
+    "/exploration_reset",
+    "/cam_coverage/reset",
+    "/map_update_manager/save_map",
+    "/red_cube_detector/enable",
+    "/red_cube_detector/snapshot",
+]
+
+_HEALTH_REQUIRED_TOPICS = [
+    "/map",
+    "/cam_coverage",
+    "/red_cubes/latest_pose",
+    "/red_cubes/found",
+]
+
+_HEALTH_OPTIONAL_TOPICS = [
+    "/move_base/global_costmap/costmap",
+]
+
+_HEALTH_OPTIONAL_SERVICES = [
+    "/approach_object/approach",
+    "/arm_control/pick",
+]
+
 
 @tool
 def halt_robot() -> str:
@@ -93,3 +118,61 @@ def get_autonomy_status() -> str:
     if published_err:
         status["warnings"] = [published_err]
     return json.dumps(status, indent=2, sort_keys=True)
+
+
+@tool
+def healthcheck_autonomy_stack() -> str:
+    """Check whether core mapping/exploration/perception dependencies are up.
+
+    Returns JSON with ``overall_ready`` plus missing required topics/services.
+    """
+    ensure_rospy()
+
+    warnings: list[str] = []
+    try:
+        master = rospy.get_master()
+        code, _, topics = master.getPublishedTopics("")
+        published = {name for name, _ in topics} if code == 1 else set()
+    except Exception as exc:
+        published = set()
+        warnings.append(f"getPublishedTopics failed: {exc}")
+
+    try:
+        code, _, services = rospy.get_master().getSystemState()
+        advertised = {s[0] for s in services[2]} if code == 1 else set()
+    except Exception as exc:
+        advertised = set()
+        warnings.append(f"getSystemState failed: {exc}")
+
+    missing_required_topics = [
+        t for t in _HEALTH_REQUIRED_TOPICS if t not in published
+    ]
+    missing_required_services = [
+        s for s in _HEALTH_REQUIRED_SERVICES if s not in advertised
+    ]
+
+    missing_optional_topics = [
+        t for t in _HEALTH_OPTIONAL_TOPICS if t not in published
+    ]
+    missing_optional_services = [
+        s for s in _HEALTH_OPTIONAL_SERVICES if s not in advertised
+    ]
+
+    report = {
+        "overall_ready": not (missing_required_topics or missing_required_services),
+        "required": {
+            "topics": {t: (t in published) for t in _HEALTH_REQUIRED_TOPICS},
+            "services": {s: (s in advertised) for s in _HEALTH_REQUIRED_SERVICES},
+        },
+        "optional": {
+            "topics": {t: (t in published) for t in _HEALTH_OPTIONAL_TOPICS},
+            "services": {s: (s in advertised) for s in _HEALTH_OPTIONAL_SERVICES},
+        },
+        "missing_required_topics": missing_required_topics,
+        "missing_required_services": missing_required_services,
+        "missing_optional_topics": missing_optional_topics,
+        "missing_optional_services": missing_optional_services,
+    }
+    if warnings:
+        report["warnings"] = warnings
+    return json.dumps(report, indent=2, sort_keys=True)

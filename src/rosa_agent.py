@@ -1,4 +1,5 @@
 import os
+import json
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from rosa import ROSA
@@ -99,9 +100,44 @@ agent = ROSA(
     tools=all_my_tools,  # <--- Hier übergeben wir die dynamisch erzeugte Liste!
 )
 
+
+def _run_startup_healthcheck() -> None:
+    """Run autonomy stack health check once at startup."""
+    tool = getattr(robot_tools, "healthcheck_autonomy_stack", None)
+    if tool is None:
+        print("[ROSA HEALTH] healthcheck_autonomy_stack tool not found.", flush=True)
+        return
+    try:
+        raw = tool.invoke({})
+    except Exception as exc:
+        print(f"[ROSA HEALTH] healthcheck failed to run: {exc}", flush=True)
+        return
+
+    try:
+        report = json.loads(raw)
+    except Exception:
+        print(f"[ROSA HEALTH] unexpected output: {raw}", flush=True)
+        return
+
+    overall_ready = bool(report.get("overall_ready", False))
+    missing_topics = report.get("missing_required_topics", []) or []
+    missing_services = report.get("missing_required_services", []) or []
+
+    if overall_ready:
+        print("[ROSA HEALTH] READY: required mapping/exploration/perception dependencies are up.", flush=True)
+        return
+
+    print(
+        "[ROSA HEALTH] NOT READY: missing required dependencies "
+        f"(topics={len(missing_topics)}, services={len(missing_services)}).",
+        flush=True,
+    )
+    print(json.dumps(report, indent=2, sort_keys=True), flush=True)
+
 # --- MAIN LOOP ---
 if __name__ == "__main__":
     print("\n✅ ROSA Limo Agent Ready! Type 'exit' to quit.")
+    _run_startup_healthcheck()
     
     while True:
         user_input = input("\nYou: ")
