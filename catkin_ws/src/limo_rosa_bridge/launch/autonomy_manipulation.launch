@@ -9,9 +9,15 @@
        (default 300 mm below) alongside if you push this further. -->
   <arg name="standoff" default="0.33" />
   <arg name="min_standoff" default="0.25" />
-  <!-- Disable blind forward creep by default: when cubes sit on/near a prop box
-       this avoids base-to-box contact; let the arm do the final reach. -->
-  <arg name="close_in_enabled" default="false" />
+  <!-- Smarter close-in: enabled by default, but guarded by front lidar so the
+       base stops if something (e.g., the support box) is in front. -->
+  <arg name="close_in_enabled" default="true" />
+  <arg name="scan_topic" default="/scan" />
+  <arg name="close_in_guard_enabled" default="true" />
+  <arg name="close_in_guard_distance_m" default="0.35" />
+  <arg name="close_in_guard_half_angle_deg" default="18.0" />
+  <arg name="close_in_guard_min_valid_beams" default="3" />
+  <arg name="close_in_guard_scan_stale_s" default="0.5" />
   <!-- Half-side of the arm's safe Cartesian cube (mm). MyCobot 280 has a
        nominal reach of ~280 mm and a usable max closer to 320 mm, so 300
        is a reasonable headroom bump to pair with the larger standoff. -->
@@ -46,6 +52,12 @@
     <param name="standoff" value="$(arg standoff)" />
     <param name="min_standoff" value="$(arg min_standoff)" />
     <param name="close_in_enabled" value="$(arg close_in_enabled)" />
+    <param name="scan_topic" value="$(arg scan_topic)" />
+    <param name="close_in_guard_enabled" value="$(arg close_in_guard_enabled)" />
+    <param name="close_in_guard_distance_m" value="$(arg close_in_guard_distance_m)" />
+    <param name="close_in_guard_half_angle_deg" value="$(arg close_in_guard_half_angle_deg)" />
+    <param name="close_in_guard_min_valid_beams" value="$(arg close_in_guard_min_valid_beams)" />
+    <param name="close_in_guard_scan_stale_s" value="$(arg close_in_guard_scan_stale_s)" />
   </node>
 
   <node pkg="limo_rosa_bridge" type="arm_control_node.py" name="arm_control" output="screen">

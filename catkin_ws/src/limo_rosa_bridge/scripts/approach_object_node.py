@@ -9,7 +9,9 @@ Flow (triggered by ``~approach`` service):
 3. Send the first reachable standoff as a ``MoveBaseGoal`` and wait.
 4. Optionally (``~close_in_enabled``), if we are still too far (planar
    distance) from the target once ``move_base`` succeeded, creep forward on
-   ``/cmd_vel`` until we are at ``~min_standoff`` from it.
+   ``/cmd_vel`` until we are at ``~min_standoff`` from it. When
+   ``~close_in_guard_enabled`` is true, this runs only while front lidar
+   clearance is safe.
 5. Yaw-align on the target so the arm/camera face it squarely.
 
 Service:
@@ -32,6 +34,7 @@ import tf2_geometry_msgs  # noqa: F401  (registers do_transform_pose/point)
 import tf2_ros
 from actionlib_msgs.msg import GoalStatus
 from geometry_msgs.msg import PointStamped, PoseStamped, Twist
+from sensor_msgs.msg import LaserScan
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from std_srvs.srv import Trigger, TriggerResponse
 from tf.transformations import quaternion_from_euler
@@ -45,6 +48,7 @@ class ApproachObject:
         self._load_params()
         self._state_lock = Lock()
         self._latest_pose = None  # PoseStamped in map frame
+        self._latest_scan = None  # LaserScan on scan_topic
 
         self.tfbuf = tf2_ros.Buffer(rospy.Duration(10.0))
         self.tfl = tf2_ros.TransformListener(self.tfbuf)
@@ -53,6 +57,7 @@ class ApproachObject:
         rospy.Subscriber(
             self.target_topic, PoseStamped, self._on_target, queue_size=1
         )
+        rospy.Subscriber(self.scan_topic, LaserScan, self._on_scan, queue_size=1)
 
         self.mb = actionlib.SimpleActionClient("/move_base", MoveBaseAction)
         rospy.loginfo("[approach_object] waiting for /move_base...")
@@ -73,6 +78,22 @@ class ApproachObject:
         self.standoff_max_deg = float(rospy.get_param("~standoff_max_deg", 90.0))
         self.close_in_speed = float(rospy.get_param("~close_in_speed", 0.08))
         self.close_in_enabled = bool(rospy.get_param("~close_in_enabled", True))
+        self.scan_topic = rospy.get_param("~scan_topic", "/scan")
+        self.close_in_guard_enabled = bool(
+            rospy.get_param("~close_in_guard_enabled", True)
+        )
+        self.close_in_guard_distance_m = float(
+            rospy.get_param("~close_in_guard_distance_m", 0.35)
+        )
+        self.close_in_guard_half_angle_deg = float(
+            rospy.get_param("~close_in_guard_half_angle_deg", 18.0)
+        )
+        self.close_in_guard_min_valid_beams = int(
+            rospy.get_param("~close_in_guard_min_valid_beams", 3)
+        )
+        self.close_in_guard_scan_stale_s = float(
+            rospy.get_param("~close_in_guard_scan_stale_s", 0.5)
+        )
         self.align_angular_speed = float(
             rospy.get_param("~align_angular_speed", 0.25)
         )
@@ -91,6 +112,10 @@ class ApproachObject:
         self.mb.cancel_all_goals()
         self.pub_cmd.publish(Twist())
         return TriggerResponse(success=True, message="cancelled")
+
+    def _on_scan(self, msg):
+        with self._state_lock:
+            self._latest_scan = msg
 
     def _handle_approach(self, _req):
         with self._state_lock:
@@ -186,6 +211,12 @@ class ApproachObject:
             if d <= self.min_standoff:
                 self.pub_cmd.publish(Twist())
                 return True
+            if self.close_in_guard_enabled:
+                guard_ok, why = self._front_clearance_ok()
+                if not guard_ok:
+                    rospy.logwarn("[approach_object] close-in blocked: %s", why)
+                    self.pub_cmd.publish(Twist())
+                    return False
             tw = Twist()
             tw.linear.x = float(self.close_in_speed)
             self.pub_cmd.publish(tw)
@@ -277,6 +308,46 @@ class ApproachObject:
         ps.pose.orientation.z = qz
         ps.pose.orientation.w = qw
         return ps
+
+    def _front_clearance_ok(self):
+        with self._state_lock:
+            scan = self._latest_scan
+        if scan is None:
+            return False, f"no LaserScan yet on {self.scan_topic}"
+
+        age = (rospy.Time.now() - scan.header.stamp).to_sec()
+        if scan.header.stamp.to_sec() <= 0.0:
+            age = 0.0
+        if age > self.close_in_guard_scan_stale_s:
+            return False, f"scan stale ({age:.2f}s > {self.close_in_guard_scan_stale_s:.2f}s)"
+
+        cone = math.radians(max(1.0, self.close_in_guard_half_angle_deg))
+        min_clear = self.close_in_guard_distance_m
+        valid = 0
+        nearest = float("inf")
+
+        for i, r in enumerate(scan.ranges):
+            ang = scan.angle_min + i * scan.angle_increment
+            if abs(ang) > cone:
+                continue
+            if not math.isfinite(r):
+                continue
+            if scan.range_min > 0.0 and r < scan.range_min:
+                continue
+            if scan.range_max > 0.0 and r > scan.range_max:
+                continue
+            valid += 1
+            if r < nearest:
+                nearest = r
+
+        if valid < self.close_in_guard_min_valid_beams:
+            return False, (
+                f"insufficient valid beams in forward cone ({valid} < "
+                f"{self.close_in_guard_min_valid_beams})"
+            )
+        if nearest < min_clear:
+            return False, f"obstacle at {nearest:.2f}m < guard {min_clear:.2f}m"
+        return True, "clear"
 
 
 def _yaw_from_quat(q):
