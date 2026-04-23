@@ -326,12 +326,16 @@ class ApproachObject:
         valid = 0
         nearest = float("inf")
 
+        effective_far = (
+            scan.range_max if (scan.range_max and scan.range_max > 0.0) else 10.0
+        )
         for i, r in enumerate(scan.ranges):
             ang = scan.angle_min + i * scan.angle_increment
             if abs(ang) > cone:
                 continue
+            # Laser drivers often publish +inf for "no return" (clear to max range).
             if not math.isfinite(r):
-                continue
+                r = effective_far
             if scan.range_min > 0.0 and r < scan.range_min:
                 continue
             if scan.range_max > 0.0 and r > scan.range_max:
