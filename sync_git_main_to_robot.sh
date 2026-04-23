@@ -88,8 +88,8 @@ fi
 git branch -D '${SYNC_BRANCH}'
 EOF
 
-echo "Shutting down ROS, rebuilding catkin_ws, and relaunching rosa_bridge on robot..."
-echo "(rosa_bridge.launch will run in the foreground. Press Ctrl-C to stop it.)"
+echo "Shutting down ROS, rebuilding catkin_ws, and relaunching robot_rosa_full on robot..."
+echo "(robot_rosa_full.launch will run in the foreground. Press Ctrl-C to stop it.)"
 ssh -t "${ROBOT_USER}@${ROBOT_HOST}" bash <<EOF
 set -e
 

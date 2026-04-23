@@ -1,12 +1,11 @@
 <launch>
   <!--
-    Full on-robot stack for ROSA on a PRE-BUILT (static) map.
+    Full on-robot stack for ROSA + live SLAM mapping (gmapping).
 
     Typical use on the robot (after sourcing ROS + workspace):
       roslaunch limo_rosa_bridge robot_rosa_full.launch
 
     Optional overrides:
-      map_file:=$(rospack find limo_rosa_bridge)/maps/<your_map>.yaml
       exploration_enabled_at_start:=false
       perception_publish_debug:=true
       perception_min_area_px:=50
@@ -14,8 +13,7 @@
 
     This launch starts:
       - limo_bringup/limo_start                  (base, lidar, TFs)
-      - limo_rosa_bridge/static_map              (map_server + AMCL → static /map,
-                                                  map -> odom)
+      - limo_rosa_bridge/limo_gmapping_no_rviz   (live SLAM /map)
       - limo_bringup/limo_move_base              (navigation on the static map)
       - astra_camera/dabai_u3                    (640x480 color, 640x400 depth;
                                                   depth_align on)
@@ -26,17 +24,12 @@
       - rviz_rosa                                (single RViz with
                                                   rosa_gmapping_markers.rviz)
 
-    To BUILD / EXTEND a map instead, use rosa_bridge.launch — it runs gmapping
-    (live SLAM). Do not combine gmapping with this launch; they both publish /map.
+    For navigation on a pre-built map instead, use static_map.launch or
+    test_map.launch (map_server + AMCL). Do not combine with gmapping.
 
     Remote ROSA: ROS_MASTER_URI → robot; source Noetic; run
     scripts/run_rosa_with_ros.sh src/rosa_agent.py
   -->
-
-  <!-- Map / localization -->
-  <arg name="map_file"
-       default="$(find limo_rosa_bridge)/maps/limo_lab_map.yaml"
-       doc="Absolute path to the .yaml map descriptor used by map_server." />
 
   <!-- Perception (red_cube_detector_node) -->
   <arg name="exploration_enabled_at_start" default="false" />
@@ -50,13 +43,10 @@
   <!-- 1) Base + sensors (+ RViz if configured in bringup) -->
   <include file="$(find limo_bringup)/launch/limo_start.launch" />
 
-  <!-- 2) Static map + AMCL localization (publishes /map and map -> odom).
-       Do NOT combine with gmapping / SLAM. -->
-  <include file="$(find limo_rosa_bridge)/launch/static_map.launch">
-    <arg name="map_file" value="$(arg map_file)" />
-  </include>
+  <!-- 2) Live mapping (gmapping publishes /map). -->
+  <include file="$(find limo_rosa_bridge)/launch/limo_gmapping_no_rviz.launch" />
 
-  <!-- 3) Navigation on the static map -->
+  <!-- 3) Navigation on the live SLAM map -->
   <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
 
   <!-- 4) DaBai U3 (Astra family) — match device topic namespace e.g. /camera/... for grasper defaults -->
