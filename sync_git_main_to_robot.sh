@@ -91,8 +91,23 @@ sleep 2
 
 echo "Building catkin workspace..."
 cd '${REMOTE_WORKTREE_PATH}/catkin_ws'
-catkin_make
+# --force-cmake rewrites devel/setup.bash using the current CMAKE_PREFIX_PATH
+# (which now includes agilex_ws). Without this, a cached CMakeCache.txt from
+# a previous build would omit agilex_ws from the overlay chain and sourcing
+# devel/setup.bash below would wipe limo_bringup out of ROS_PACKAGE_PATH.
+catkin_make --force-cmake
 source devel/setup.bash
+
+# Belt-and-suspenders: re-source the AgileX workspace AFTER our own so that
+# limo_bringup / astra_camera / limo_base are guaranteed to be on
+# ROS_PACKAGE_PATH at launch time, even if the devel/setup.bash chain above
+# happens to be wrong for any reason. Safe because our catkin_ws packages
+# don't share names with anything in agilex_ws.
+source "${REMOTE_AGILEX_WS_SETUP}"
+
+echo "ROS_PACKAGE_PATH=\${ROS_PACKAGE_PATH}"
+echo "Sanity check: locating limo_bringup..."
+rospack find limo_bringup
 
 echo "Launching rosa_bridge.launch..."
 exec roslaunch limo_rosa_bridge rosa_bridge.launch
