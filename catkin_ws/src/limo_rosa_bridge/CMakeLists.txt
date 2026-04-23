@@ -212,6 +212,11 @@ install(DIRECTORY launch/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
 )
 
+## Saved occupancy-grid maps (consumed by test_map.launch via map_server).
+install(DIRECTORY maps/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/maps
+)
+
 #############
 ## Testing ##
 #############

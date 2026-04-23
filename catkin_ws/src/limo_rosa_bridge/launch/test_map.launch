@@ -1,39 +1,43 @@
 <launch>
   <!--
-    Launch file to run the LIMO robot with a pre-built map for localization and navigation.
-    This is used when you want ROSA to navigate using map coordinates, as described
-    in the robot_launch_runbook.md.
+    Minimal static-map smoke-test launch.
+
+    Use this to quickly verify that a saved map loads and the robot localizes on it
+    (move_base + RViz), without spinning up perception / manipulation. For the full
+    ROSA stack on a static map, use robot_rosa_full.launch instead.
   -->
 
-  <!-- Arguments -->
-  <arg name="map_file" default="$(find limo_rosa_bridge)/maps/limo_lab_map.yaml" doc="Path to the map file to be used."/>
-  <arg name="open_rviz" default="true" doc="Set to false to prevent RViz from launching."/>
+  <arg name="map_file"
+       default="$(find limo_rosa_bridge)/maps/limo_lab_map.yaml"
+       doc="Absolute path to the .yaml map descriptor used by map_server." />
+  <arg name="open_rviz" default="true" doc="Set to false to prevent RViz from launching." />
 
-  <!-- Limo Bringup: Starts the basic robot drivers -->
+  <!-- Base + sensors -->
   <include file="$(find limo_bringup)/launch/limo_start.launch" />
 
-  <!-- Map Server: Loads the pre-built map -->
-  <node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
+  <!-- Static /map + AMCL (shared fragment — keeps this in sync with robot_rosa_full.launch). -->
+  <include file="$(find limo_rosa_bridge)/launch/static_map.launch">
+    <arg name="map_file" value="$(arg map_file)" />
+  </include>
 
-  <!-- AMCL: Adaptive Monte Carlo Localization for localizing the robot in the map -->
-  <include file="$(find limo_bringup)/launch/limo_amcl.launch" />
-
-  <!-- Move Base: The navigation stack that plans paths -->
+  <!-- Navigation on the static map -->
   <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
 
-  <!-- Camera Driver -->
-  <include file="$(find astra_camera)/launch/astra_pro.launch" />
+  <!-- DaBai U3 RGB-D (the only camera this robot supports). -->
+  <include file="$(find astra_camera)/launch/dabai_u3.launch">
+    <arg name="enable_depth" value="true" />
+    <arg name="depth_align" value="true" />
+    <arg name="color_width" value="640" />
+    <arg name="color_height" value="480" />
+    <arg name="depth_width" value="640" />
+    <arg name="depth_height" value="400" />
+  </include>
 
-  <!-- Rosbridge: Provides a WebSocket interface to ROS -->
+  <!-- Rosbridge so the remote can talk to /map, /amcl_pose, etc. while smoke-testing. -->
   <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" />
 
-  <!-- Autonomy nodes required by ROSA tools -->
-  <include file="$(find limo_rosa_bridge)/launch/autonomy_core.launch" />
-  <include file="$(find limo_rosa_bridge)/launch/autonomy_perception.launch" />
-
-  <!-- RViz: Visualization tool -->
   <group if="$(arg open_rviz)">
-    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find limo_rosa_bridge)/rviz/nav.rviz" required="true" />
+    <node name="rviz" pkg="rviz" type="rviz"
+          args="-d $(find limo_rosa_bridge)/rviz/nav.rviz" required="true" />
   </group>
-
 </launch>

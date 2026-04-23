@@ -1,0 +1,26 @@
+<launch>
+  <!--
+    Static-map localization fragment.
+
+    Loads a pre-built occupancy grid via map_server and starts AMCL on it.
+    Intended to be included from higher-level launches (robot_rosa_full.launch,
+    test_map.launch) so the map + localization config lives in exactly one place.
+
+    NEVER include this together with gmapping/slam — both would publish /map
+    and the map -> odom TF and fight each other.
+
+    Override the map at launch time:
+      roslaunch limo_rosa_bridge <parent>.launch \
+        map_file:=$(rospack find limo_rosa_bridge)/maps/my_other_map.yaml
+  -->
+
+  <arg name="map_file"
+       default="$(find limo_rosa_bridge)/maps/limo_lab_map.yaml"
+       doc="Absolute path to the .yaml map descriptor consumed by map_server." />
+
+  <!-- Static /map publisher -->
+  <node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
+
+  <!-- Adaptive Monte Carlo Localization on the static map (publishes map -> odom). -->
+  <include file="$(find limo_bringup)/launch/limo_amcl.launch" />
+</launch>
