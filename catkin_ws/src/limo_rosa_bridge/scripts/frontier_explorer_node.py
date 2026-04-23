@@ -22,14 +22,12 @@ Out of scope (moved elsewhere after the refactor):
 
 import math
 
-import actionlib
 import numpy as np
 import rospy
 import tf2_ros
-from actionlib_msgs.msg import GoalID, GoalStatus
-from geometry_msgs.msg import Point, Pose, PoseStamped, Quaternion, Twist
+from actionlib_msgs.msg import GoalID
+from geometry_msgs.msg import Point, Pose, PoseStamped, Quaternion
 from map_msgs.msg import OccupancyGridUpdate
-from move_base_msgs.msg import MoveBaseAction
 from nav_msgs.msg import OccupancyGrid
 from nav_msgs.srv import GetPlan, GetPlanRequest
 from std_srvs.srv import SetBool, SetBoolResponse, Trigger, TriggerResponse
@@ -47,17 +45,25 @@ class FrontierExplorer:
         self.tfbuf = tf2_ros.Buffer()
         self.tfl = tf2_ros.TransformListener(self.tfbuf)
 
-        self.mb = actionlib.SimpleActionClient("/move_base", MoveBaseAction)
-        rospy.loginfo("[frontier_explorer] Waiting for /move_base action...")
-        self.mb.wait_for_server()
-        rospy.loginfo("[frontier_explorer] Connected to /move_base")
-
-        rospy.wait_for_service("/move_base/GlobalPlanner/make_plan")
+        # Lazy ServiceProxy: does not connect until first call, and failures
+        # are caught in is_reachable(). This lets the node come up cleanly
+        # even if move_base is still starting.
         self.make_plan = rospy.ServiceProxy(
             "/move_base/GlobalPlanner/make_plan", GetPlan
         )
 
         self.timer = rospy.Timer(rospy.Duration(1.0), self.tick)
+
+        if self.enabled:
+            rospy.loginfo(
+                "[frontier_explorer] Exploration ENABLED at start "
+                "(enabled_at_start=true)."
+            )
+        else:
+            rospy.loginfo(
+                "[frontier_explorer] Idle. Waiting for a client to call "
+                "/exploration_enabled with data=true to start exploring."
+            )
 
     # ----------------------------------------------------------------- init
     def _load_params(self):
@@ -78,8 +84,10 @@ class FrontierExplorer:
         self.safety_radius_m = float(rospy.get_param("~safety_radius_m", 0.2))
         self.max_candidates_eval = int(rospy.get_param("~max_candidates_eval", 100))
         # If True, start exploration right after launch. Otherwise wait until
-        # a client calls /exploration_enabled set_bool(True).
-        self.enabled_at_start = bool(rospy.get_param("~enabled_at_start", True))
+        # a client calls /exploration_enabled set_bool(True). We default to
+        # False so launching rosa_bridge.launch does not kick the robot into
+        # autonomous exploration until ROSA (or another client) asks for it.
+        self.enabled_at_start = bool(rospy.get_param("~enabled_at_start", False))
 
     def _init_state(self):
         self.costmap_msg = None
@@ -146,6 +154,13 @@ class FrontierExplorer:
     def _handle_enable(self, req):
         was = self.enabled
         self.enabled = bool(req.data)
+        if self.enabled and not was:
+            # Coming out of idle: drop any stale progress tracking so the
+            # next tick selects a fresh goal based on the current map.
+            self.current_goal = None
+            self.plan_fail_count = 0
+            self.last_goal_distance = None
+            self.last_progress_time = rospy.Time.now()
         if not self.enabled and was:
             # Actively cancel move_base so the robot stops right away.
             try:
