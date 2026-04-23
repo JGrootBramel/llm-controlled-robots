@@ -78,11 +78,18 @@ class ArmControl:
         self.speed = int(rospy.get_param("~speed", 40))
         self.place_speed = int(rospy.get_param("~place_speed", 40))
         self.place_gripper_open = int(rospy.get_param("~place_gripper_open", 80))
+        # Physical mount yaw (CCW degrees from base_link +X to arm +X). Set to
+        # 90 for the default LIMO Cobot mount (arm faces robot-left). Changing
+        # this rotates the Cartesian mapping AND the home/place defaults in
+        # one place, so the gripper keeps pointing forward at home regardless.
+        self.mount_yaw_deg = float(
+            rospy.get_param("~mount_yaw_deg", mch.DEFAULT_MOUNT_YAW_DEG)
+        )
         self.place_angles = rospy.get_param(
-            "~place_angles", list(mch.PLACE_ANGLES)
+            "~place_angles", list(mch.default_place_angles(self.mount_yaw_deg))
         )
         self.home_angles = rospy.get_param(
-            "~home_angles", list(mch.HOME_ANGLES)
+            "~home_angles", list(mch.default_home_angles(self.mount_yaw_deg))
         )
         self.coord_lim_mm = float(rospy.get_param("~coord_limit_mm", 280.0))
         self.pre_dy_mm = float(rospy.get_param("~pre_grasp_delta_y_mm", 30.0))
@@ -144,7 +151,9 @@ class ArmControl:
                 ),
             )
         x_m, y_m, z_m = target
-        X_arm, Y_arm, Z_arm = mch.base_to_arm_mm(x_m, y_m, z_m)
+        X_arm, Y_arm, Z_arm = mch.base_to_arm_mm(
+            x_m, y_m, z_m, mount_yaw_deg=self.mount_yaw_deg
+        )
         # Apply static z-adjust and clamp inside the safe cube.
         Z_arm = Z_arm + float(self.grasp_z_adjust_mm)
         limits = mch.GraspLimits(
