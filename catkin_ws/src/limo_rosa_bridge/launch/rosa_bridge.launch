@@ -8,22 +8,17 @@
     <include file="$(find limo_rosa_bridge)/launch/limo_gmapping_no_rviz.launch" />
     <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
 
-    <!-- Astra Pro camera
-         Note: Older Astra drivers on the robot are stable with MJPEG UVC color. -->
-    <include file="$(find astra_camera)/launch/astra_pro.launch">
-      <arg name="enable_depth" value="true" />
-      <arg name="depth_align" value="false" />
-      <arg name="enable_ir" value="false" />
+    <!-- DaBai U3 (Astra family) — match device topic namespace e.g. /camera/... for grasper defaults -->
+  <include file="$(find astra_camera)/launch/dabai_u3.launch">
+    <arg name="enable_depth" value="true" />
+    <arg name="depth_align" value="true" />
+    <arg name="color_width" value="640" />
+    <arg name="color_height" value="480" />
+    <arg name="depth_width" value="640" />
+    <arg name="depth_height" value="400" />
+  </include>
 
-      <arg name="color_width" value="640" />
-      <arg name="color_height" value="480" />
-      <arg name="color_fps" value="30" />
 
-      <arg name="depth_width" value="320" />
-      <arg name="depth_height" value="200" />
-      <arg name="depth_fps" value="10" />
-      <arg name="uvc_camera_format" value="mjpeg" />
-    </include>
 
     <!-- Talk to the remote PC / ROSA. -->
     <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" />
