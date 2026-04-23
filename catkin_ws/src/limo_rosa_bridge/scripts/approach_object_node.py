@@ -7,9 +7,9 @@ Flow (triggered by ``~approach`` service):
 2. Compute a safe standoff pose behind the target using
    :func:`_helpers.standoff.standoff_candidates`.
 3. Send the first reachable standoff as a ``MoveBaseGoal`` and wait.
-4. If we are still too far (planar distance) from the target once
-   ``move_base`` succeeded, creep forward on ``/cmd_vel`` until we are at
-   ``~min_standoff`` from it.
+4. Optionally (``~close_in_enabled``), if we are still too far (planar
+   distance) from the target once ``move_base`` succeeded, creep forward on
+   ``/cmd_vel`` until we are at ``~min_standoff`` from it.
 5. Yaw-align on the target so the arm/camera face it squarely.
 
 Service:
@@ -72,6 +72,7 @@ class ApproachObject:
         self.standoff_arc_deg = float(rospy.get_param("~standoff_arc_deg", 10.0))
         self.standoff_max_deg = float(rospy.get_param("~standoff_max_deg", 90.0))
         self.close_in_speed = float(rospy.get_param("~close_in_speed", 0.08))
+        self.close_in_enabled = bool(rospy.get_param("~close_in_enabled", True))
         self.align_angular_speed = float(
             rospy.get_param("~align_angular_speed", 0.25)
         )
@@ -111,11 +112,14 @@ class ApproachObject:
                 success=False, message="No reachable standoff goal found."
             )
 
-        close_ok = self._close_in_if_needed(target_map)
-        if not close_ok:
-            return TriggerResponse(
-                success=False, message="Close-in driving failed or timed out."
-            )
+        if self.close_in_enabled:
+            close_ok = self._close_in_if_needed(target_map)
+            if not close_ok:
+                return TriggerResponse(
+                    success=False, message="Close-in driving failed or timed out."
+                )
+        else:
+            rospy.loginfo("[approach_object] close-in disabled; holding standoff pose.")
 
         aligned = self._yaw_align(target_map)
         if not aligned:
