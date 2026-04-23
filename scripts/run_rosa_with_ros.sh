@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Run ROSA / rosa_agent with ROS Noetic Python bindings visible (tf2, rospy, etc.).
+# Default entrypoint is src/rosa_agent.py, which dynamically imports tools from
+# src/limo_llm_control/tools via that package's __all__.
 #
 # Usage (from repo root, after filling in network):
 #   export ROS_MASTER_URI=http://<robot_ip>:11311
@@ -50,8 +52,11 @@ then
   exit 1
 fi
 
-PY=${1:-src/rosa_agent.py}
-shift || true
+PY="src/rosa_agent.py"
+if [[ $# -gt 0 && "$1" != -* ]]; then
+  PY="$1"
+  shift
+fi
 
 if [[ -d "$REPO/venv" ]]; then
   # shellcheck source=/dev/null
@@ -62,4 +67,15 @@ if [[ -d "$REPO/venv" ]]; then
   fi
 fi
 
-exec python3 "$REPO/$PY" "$@"
+if [[ "$PY" = /* ]]; then
+  TARGET_PY="$PY"
+else
+  TARGET_PY="$REPO/$PY"
+fi
+
+if [[ ! -f "$TARGET_PY" ]]; then
+  echo "Python entrypoint not found: $TARGET_PY" >&2
+  exit 1
+fi
+
+exec python3 "$TARGET_PY" "$@"

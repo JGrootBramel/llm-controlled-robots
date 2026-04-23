@@ -78,7 +78,7 @@ source devel/setup.bash
 For live mapping with `gmapping` and autonomy tools:
 
 ```bash
-roslaunch limo_rosa_bridge rosa_bridge.launch
+roslaunch limo_rosa_bridge robot_rosa_full.launch
 ```
 
 This starts:
@@ -140,11 +140,25 @@ ROS_MASTER_URI=http://<robot_ip>:11311
 ROS_IP=<remote_pc_ip>
 ```
 
-Run the ROSA LIMO agent (robot profile):
+Run the ROSA LIMO agent (unified startup):
 
 ```bash
 cd ~/llm-controlled-robots
-python src/launch_rosa.py
+./start_rosa.sh
+```
+
+This unified entrypoint delegates to `scripts/run_rosa_with_ros.sh` and runs
+`src/rosa_agent.py` by default.
+
+`src/rosa_agent.py` dynamically imports ROSA tools from
+`src/limo_llm_control/tools` (via that package's `__all__`), so adding/removing
+tools in that package updates the available toolset without changing launch
+scripts.
+
+If needed, you can still run the runner directly:
+
+```bash
+./scripts/run_rosa_with_ros.sh src/rosa_agent.py
 ```
 
 ### Automated tests
