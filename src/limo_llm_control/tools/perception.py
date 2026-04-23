@@ -84,18 +84,30 @@ def get_latest_red_cube(timeout_s: float = 1.0) -> str:
 def is_red_cube_found(timeout_s: float = 0.5) -> str:
     """Return whether the detector is currently reporting a red cube.
 
-    Primary signal is ``/red_cubes/found``. If that topic is missing or slow
-    during startup, fall back to checking for a fresh ``/red_cubes/latest_pose``
-    message within the same timeout window.
+    Cross-check both ``/red_cubes/found`` and ``/red_cubes/latest_pose``.
+    We treat a received pose as a positive signal even when ``found`` is
+    currently false (common with brief detector flicker while a valid pose
+    remains available to downstream consumers).
     """
     ensure_rospy()
     timeout = max(0.05, float(timeout_s))
+    found_msg = None
+    pose_msg = None
+
     try:
-        msg = rospy.wait_for_message(_FOUND_TOPIC, Bool, timeout=timeout)
+        found_msg = rospy.wait_for_message(_FOUND_TOPIC, Bool, timeout=timeout)
     except Exception:
-        try:
-            rospy.wait_for_message(_LATEST_POSE_TOPIC, PoseStamped, timeout=timeout)
-            return "found=True (inferred from latest_pose)"
-        except Exception:
-            return "found=unknown (no message yet)"
-    return "found=True" if msg.data else "found=False"
+        found_msg = None
+
+    try:
+        pose_msg = rospy.wait_for_message(_LATEST_POSE_TOPIC, PoseStamped, timeout=timeout)
+    except Exception:
+        pose_msg = None
+
+    if found_msg is not None and bool(found_msg.data):
+        return "found=True"
+    if pose_msg is not None:
+        return "found=True (latest_pose available)"
+    if found_msg is not None:
+        return "found=False"
+    return "found=unknown (no message yet)"
