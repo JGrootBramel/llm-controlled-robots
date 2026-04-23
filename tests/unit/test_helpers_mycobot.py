@@ -80,3 +80,22 @@ def test_canonical_poses_shape():
     assert len(mch.HOME_ANGLES) == 6
     assert len(mch.PLACE_ANGLES) == 6
     assert len(mch.GRASP_RXRYRZ) == 3
+
+
+def test_default_ready_angles_fallback_preorients_wrist():
+    # Fallback ready pose should cancel the mount yaw on J1 and match the
+    # grasp Rz on J6 so the subsequent Cartesian move doesn't spin the wrist.
+    ready = mch.default_ready_angles_fallback(
+        mount_yaw_deg=90.0,
+        grasp_rz_deg=mch.GRASP_RXRYRZ[2],
+    )
+    assert len(ready) == 6
+    assert ready[0] == pytest.approx(-90.0)
+    assert ready[-1] == pytest.approx(mch.GRASP_RXRYRZ[2])
+
+
+def test_default_ready_point_base_m_is_forward_and_up():
+    x, y, z = mch.DEFAULT_READY_POINT_BASE_M
+    assert x > 0.0  # forward of the robot
+    assert y == pytest.approx(0.0)  # centred laterally
+    assert z > 0.0  # above the base plate

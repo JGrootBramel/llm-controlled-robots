@@ -144,3 +144,32 @@ def default_place_angles(
 PLACE_ANGLES: Tuple[float, float, float, float, float, float] = (
     default_place_angles()
 )
+
+
+# Default staging point used for deriving the ready pose when we ask the arm
+# firmware to solve IK. Base-frame metres: 20 cm forward of the robot, centred
+# laterally, 15 cm above the base. High enough to clear the cube, inside the
+# arm's reachable sphere, and on the same side as the grasp orientation so
+# the wrist doesn't have to flip on the way down.
+DEFAULT_READY_POINT_BASE_M: Tuple[float, float, float] = (0.20, 0.0, 0.15)
+
+
+def default_ready_angles_fallback(
+    mount_yaw_deg: float = DEFAULT_MOUNT_YAW_DEG,
+    grasp_rz_deg: float = GRASP_RXRYRZ[2],
+) -> Tuple[float, float, float, float, float, float]:
+    """Hand-picked ready pose used when IK-derived pose is unavailable.
+
+    Shoulder (J2) and elbow (J3) pulled forward-down so the gripper hangs
+    above the work area instead of pointing straight up; wrist (J6)
+    pre-rolled to roughly match the grasp orientation so the subsequent
+    Cartesian move doesn't have to spin the end effector.
+    """
+    return (
+        -float(mount_yaw_deg),
+        -45.0,
+        -45.0,
+        0.0,
+        90.0,
+        float(grasp_rz_deg),
+    )

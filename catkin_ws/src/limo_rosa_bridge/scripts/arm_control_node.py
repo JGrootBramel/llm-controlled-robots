@@ -65,6 +65,7 @@ class ArmControl:
         )
 
         self._mc = self._connect_arm()
+        self.ready_angles = self._compute_ready_angles()
 
         rospy.Service("~pick", Trigger, self._handle_pick)
         rospy.Service("~place", Trigger, self._handle_place)
@@ -105,6 +106,18 @@ class ArmControl:
             int(rospy.get_param("~grasp_coord_ry", mch.GRASP_RXRYRZ[1])),
             int(rospy.get_param("~grasp_coord_rz", mch.GRASP_RXRYRZ[2])),
         )
+        # Staging pose tuning. The pick goes home -> ready -> pre -> grasp.
+        # ``ready_angles`` is computed from IK at connect time (see
+        # ``_compute_ready_angles``) unless the user pins it via param.
+        # ``approach_mode`` is the send_coords mode for the pre-grasp move:
+        # 0 = point-to-point joint space (smooth, wrist can't flip),
+        # 1 = linear Cartesian (straight line, only safe once wrist is
+        # pre-oriented by the ready pose).
+        self.approach_mode = int(rospy.get_param("~approach_mode", 0))
+        self.ready_point_base_m = rospy.get_param(
+            "~ready_point_base_xyz_m", list(mch.DEFAULT_READY_POINT_BASE_M)
+        )
+        self._ready_angles_override = rospy.get_param("~ready_angles", None)
 
     # ---------------------------------------------------------- arm wiring
     def _connect_arm(self):
@@ -121,6 +134,60 @@ class ArmControl:
         except Exception as e:
             rospy.logerr("[arm_control] MyCobot connect failed: %s", e)
             return None
+
+    def _compute_ready_angles(self):
+        """Decide the pre-grasp staging pose.
+
+        If ``~ready_angles`` is set, trust the operator verbatim. Otherwise
+        ask the arm firmware's on-board IK for a solution at the configured
+        base-frame staging point with the grasp orientation, so the wrist
+        is pre-oriented the same as the eventual grasp pose. Everything
+        is wrapped in try/except: if the arm is disconnected or IK refuses
+        we drop to a hand-picked fallback pose instead of crashing.
+        """
+        fallback = list(
+            mch.default_ready_angles_fallback(
+                mount_yaw_deg=self.mount_yaw_deg,
+                grasp_rz_deg=self.grasp_rxryrz[2],
+            )
+        )
+        if self._ready_angles_override:
+            return [float(a) for a in self._ready_angles_override]
+        if self._mc is None:
+            rospy.logwarn(
+                "[arm_control] arm not connected; using fallback ready pose %s",
+                fallback,
+            )
+            return fallback
+        try:
+            x_m, y_m, z_m = (float(v) for v in self.ready_point_base_m)
+            x_arm, y_arm, z_arm = mch.base_to_arm_mm(
+                x_m, y_m, z_m, mount_yaw_deg=self.mount_yaw_deg
+            )
+            target = [
+                x_arm, y_arm, z_arm,
+                float(self.grasp_rxryrz[0]),
+                float(self.grasp_rxryrz[1]),
+                float(self.grasp_rxryrz[2]),
+            ]
+            solved = self._mc.solve_inv_kinematics(target, list(self.home_angles))
+            if solved and len(solved) == 6 and any(abs(a) > 1e-6 for a in solved):
+                rospy.loginfo(
+                    "[arm_control] ready pose via IK: %s (target arm_mm=%s)",
+                    ["%.1f" % a for a in solved],
+                    ["%.0f" % v for v in target[:3]],
+                )
+                return [float(a) for a in solved]
+            rospy.logwarn(
+                "[arm_control] solve_inv_kinematics returned %s; using fallback %s",
+                solved, fallback,
+            )
+        except Exception as e:
+            rospy.logwarn(
+                "[arm_control] ready-pose IK failed (%s); using fallback %s",
+                e, fallback,
+            )
+        return fallback
 
     # ---------------------------------------------------------- callbacks
     def _on_target(self, msg):
@@ -228,14 +295,22 @@ class ArmControl:
         speed = self.speed
         try:
             self._mc.set_gripper_state(0, 80)
-            # Pre-grasp above/behind the target. mode=1 = linear Cartesian interp.
+            # Stage 1: move to the ready pose in joint space. The big J1/J2
+            # rotation happens here, gripper safely high, before we are near
+            # the target. Wrist ends up pre-oriented like the grasp pose so
+            # the subsequent Cartesian move is essentially a translation.
+            self._mc.send_angles(
+                list(self.ready_angles), max(20, speed // 2)
+            )
+            time.sleep(2.0)
+            # Stage 2: pre-grasp waypoint above/behind the target.
             pre = [
                 x_mm,
                 y_mm + self.pre_dy_mm,
                 z_mm + self.pre_dz_mm,
                 rx, ry, rz,
             ]
-            self._mc.send_coords(pre, speed, 1)
+            self._mc.send_coords(pre, speed, int(self.approach_mode))
             time.sleep(2.0)
             check = self._coords_reached(pre[:3])
             if check is None:
@@ -248,10 +323,16 @@ class ArmControl:
                     "want=%s got=%s err_mm=%.1f",
                     pre[:3], list(check[2][:3]), check[1],
                 )
+                # Retreat via ready so the recovery motion stays clear of
+                # the target instead of sweeping through it.
+                self._mc.send_angles(list(self.ready_angles), 50)
+                time.sleep(1.5)
                 self._mc.send_angles(list(self.home_angles), 50)
                 time.sleep(1.5)
                 return False
 
+            # Stage 3: final descent uses linear Cartesian for a straight
+            # line down onto the cube regardless of ~approach_mode.
             grasp = [x_mm, y_mm, z_mm, rx, ry, rz]
             self._mc.send_coords(grasp, speed, 1)
             time.sleep(2.0)
@@ -266,13 +347,18 @@ class ArmControl:
                     "want=%s got=%s err_mm=%.1f",
                     grasp[:3], list(check[2][:3]), check[1],
                 )
+                self._mc.send_angles(list(self.ready_angles), 50)
+                time.sleep(1.5)
                 self._mc.send_angles(list(self.home_angles), 50)
                 time.sleep(1.5)
                 return False
 
             self._mc.set_gripper_state(1, 80)
             time.sleep(1.5)
-            # Lift back to home so base can move safely.
+            # Lift via the ready pose first so the cube clears the work area
+            # before J1 swings the arm back to home.
+            self._mc.send_angles(list(self.ready_angles), 50)
+            time.sleep(1.5)
             self._mc.send_angles(list(self.home_angles), 50)
             time.sleep(1.5)
             return True

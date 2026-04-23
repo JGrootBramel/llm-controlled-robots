@@ -11,6 +11,11 @@
        joint 1 = -90 to face forward at home). Change this if the arm is
        bolted on differently. -->
   <arg name="mount_yaw_deg" default="90.0" />
+  <!-- Pre-grasp interpolation mode for send_coords:
+       0 = point-to-point joint space (smoothest, no wrist flip; default)
+       1 = linear Cartesian (straight-line but only safe once the ready
+       pose has pre-oriented the wrist). -->
+  <arg name="approach_mode" default="0" />
   <arg name="target_pose_topic" default="/red_cubes/latest_pose" />
   <!-- One-shot override topic the LLM tools publish to (pick_at_pose etc.).
        Defaults to the arm node's private topic so it works without a remap. -->
@@ -29,6 +34,7 @@
     <param name="baud" value="$(arg mycobot_baud)" />
     <param name="base_frame" value="$(arg base_frame)" />
     <param name="mount_yaw_deg" value="$(arg mount_yaw_deg)" />
+    <param name="approach_mode" value="$(arg approach_mode)" />
     <!-- Wire the detector's latched pose straight into the arm node. -->
     <remap from="~target_pose" to="$(arg target_pose_topic)" />
     <!-- Explicit one-shot pose (used by ROSA's pick_at_pose tool). -->
