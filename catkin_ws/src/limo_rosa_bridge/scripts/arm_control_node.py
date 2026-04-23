@@ -3,12 +3,22 @@
 
 Pure manipulation. It does *not* know about colour detection, cameras,
 odometry or move_base — everything it needs to reach for arrives through
-the ``~target_pose`` topic (``geometry_msgs/PoseStamped`` in
-``base_link``).
+two ``geometry_msgs/PoseStamped`` topics:
+
+* ``~target_pose``           — continuous stream from the perception stack
+                               (e.g. ``/red_cubes/latest_pose``).
+* ``~target_pose_override``  — one-shot, externally supplied pose. When
+                               present, it wins for the next pick and is
+                               cleared afterwards. Used by the ``pick_at_pose``
+                               ROSA tool so callers can hand the arm explicit
+                               coordinates without racing the detector.
+
+Both topics may be in any TF frame (transformed into ``base_link`` at
+pick time).
 
 Services (all ``std_srvs/Trigger``):
 
-* ``~pick``      — close gripper on the latest target
+* ``~pick``      — close gripper on the latest target (override > stream)
 * ``~place``     — drop the cube on the left-side tray
 * ``~go_home``   — return to the idle home pose
 """
@@ -39,12 +49,19 @@ class ArmControl:
         self._load_params()
         self._lock = Lock()
         self._latest_target = None
+        self._override_target = None
 
         self.tfbuf = tf2_ros.Buffer(rospy.Duration(10.0))
         self.tfl = tf2_ros.TransformListener(self.tfbuf)
 
         rospy.Subscriber(
             "~target_pose", PoseStamped, self._on_target, queue_size=1
+        )
+        rospy.Subscriber(
+            "~target_pose_override",
+            PoseStamped,
+            self._on_target_override,
+            queue_size=1,
         )
 
         self._mc = self._connect_arm()
@@ -100,14 +117,28 @@ class ArmControl:
         with self._lock:
             self._latest_target = msg
 
+    def _on_target_override(self, msg):
+        with self._lock:
+            self._override_target = msg
+        rospy.loginfo(
+            "[arm_control] override target latched: frame=%s xyz=(%.3f, %.3f, %.3f)",
+            msg.header.frame_id,
+            msg.pose.position.x,
+            msg.pose.position.y,
+            msg.pose.position.z,
+        )
+
     def _handle_pick(self, _req):
         if self._mc is None:
             return TriggerResponse(success=False, message="arm not connected")
-        target = self._latest_target_in_base()
+        target, source = self._select_target_in_base()
         if target is None:
             return TriggerResponse(
                 success=False,
-                message="No target pose available in base_link; publish ~target_pose first.",
+                message=(
+                    "No target pose available; publish ~target_pose or "
+                    "~target_pose_override first."
+                ),
             )
         x_m, y_m, z_m = target
         X_arm, Y_arm, Z_arm = mch.base_to_arm_mm(x_m, y_m, z_m)
@@ -128,9 +159,9 @@ class ArmControl:
         return TriggerResponse(
             success=bool(ok),
             message=(
-                f"pick ok at arm_mm=({cx:.0f},{cy:.0f},{cz:.0f})"
+                f"pick ok at arm_mm=({cx:.0f},{cy:.0f},{cz:.0f}) [src={source}]"
                 if ok
-                else "pick failed; see node logs"
+                else f"pick failed [src={source}]; see node logs"
             ),
         )
 
@@ -183,11 +214,34 @@ class ArmControl:
             rospy.logerr("[arm_control] pick error: %s", e)
             return False
 
-    def _latest_target_in_base(self):
+    def _select_target_in_base(self):
+        """Pick the pose to grasp at and return it in ``base_link``.
+
+        Override pose wins when set and is consumed (cleared) so the next
+        pick falls back to the perception stream. Returns
+        ``(xyz_tuple_or_None, source_label)``.
+        """
         with self._lock:
-            pose = self._latest_target
-        if pose is None:
-            return None
+            override = self._override_target
+            self._override_target = None
+            stream = self._latest_target
+
+        if override is not None:
+            xyz = self._pose_in_base(override)
+            if xyz is not None:
+                return xyz, "override"
+            rospy.logwarn(
+                "[arm_control] override pose could not be transformed to %s; "
+                "falling back to stream",
+                self.base_frame,
+            )
+
+        if stream is None:
+            return None, "none"
+        xyz = self._pose_in_base(stream)
+        return (xyz, "stream") if xyz is not None else (None, "stream")
+
+    def _pose_in_base(self, pose):
         if pose.header.frame_id == self.base_frame:
             return (pose.pose.position.x, pose.pose.position.y, pose.pose.position.z)
         try:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import rospy
+from geometry_msgs.msg import PoseStamped
 from langchain.tools import tool
 from std_srvs.srv import Trigger
 
@@ -14,6 +15,7 @@ _PLACE_SRV = "/arm_control/place"
 _HOME_SRV = "/arm_control/go_home"
 _APPROACH_SRV = "/approach_object/approach"
 _CANCEL_APPROACH_SRV = "/approach_object/cancel"
+_TARGET_OVERRIDE_TOPIC = "/arm_control/target_pose_override"
 
 
 def _trigger(service_name: str) -> str:
@@ -57,6 +59,53 @@ def pick_object() -> str:
     the detector's ``/red_cubes/latest_pose``).
     """
     return _trigger(_PICK_SRV)
+
+
+@tool
+def pick_at_pose(
+    x_m: float,
+    y_m: float,
+    z_m: float,
+    frame_id: str = "map",
+) -> str:
+    """Pick at an explicit 3D pose, bypassing the perception stack.
+
+    Publishes a one-shot ``geometry_msgs/PoseStamped`` to
+    ``/arm_control/target_pose_override`` and immediately calls
+    ``/arm_control/pick``. The arm node consumes the override (so the next
+    pick falls back to the detector stream) and transforms the pose into
+    ``base_link`` itself, so any TF frame is fine.
+
+    Use this when you already know exactly where the object is — for
+    example after the user supplies coordinates, or after a custom
+    perception pass. ``z_m`` is required because the cube height varies
+    and the arm needs the full 3D position; do not guess it from x/y.
+
+    Tip: drive the base near the target first with ``go_to_map_pose``
+    (the arm only reaches ~0.28 m from ``base_link``).
+    """
+    ensure_rospy()
+    frame_id = frame_id.strip() if frame_id else ""
+    if not frame_id:
+        return "Invalid frame_id: empty string is not allowed."
+
+    pub = rospy.Publisher(_TARGET_OVERRIDE_TOPIC, PoseStamped, queue_size=1, latch=True)
+    rospy.sleep(0.2)
+    pose = PoseStamped()
+    pose.header.stamp = rospy.Time.now()
+    pose.header.frame_id = frame_id
+    pose.pose.position.x = float(x_m)
+    pose.pose.position.y = float(y_m)
+    pose.pose.position.z = float(z_m)
+    pose.pose.orientation.w = 1.0
+    pub.publish(pose)
+    rospy.sleep(0.2)
+    pick_result = _trigger(_PICK_SRV)
+    return (
+        f"Override pose published to {_TARGET_OVERRIDE_TOPIC} in frame "
+        f"'{frame_id}' at (x={x_m:.3f}, y={y_m:.3f}, z={z_m:.3f}). "
+        f"Pick result: {pick_result}"
+    )
 
 
 @tool

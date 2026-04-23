@@ -6,28 +6,30 @@
       roslaunch limo_rosa_bridge robot_rosa_full.launch
 
     Optional overrides:
-      cube_target_color:=red
-      object_finder_prompt:='"a red cube"'
+      perception_publish_debug:=true
+      perception_min_area_px:=50
+      perception_max_area_px:=4000
 
     This launch starts:
-      - limo_bringup/limo_start          (base, lidar, TFs)
-      - limo_bringup/limo_gmapping       (online SLAM → /map; do not use map_server+amcl with this)
-      - limo_bringup/limo_move_base      (navigation on the live map)
-      - astra_camera/dabai_u3            (640×480 color, 640×400 depth; depth_align on)
-      - rosbridge_server                 (WebSocket, port 9090)
-      - cam_coverage + autonomy_core
-      - object_finder (NanoOWL)
+      - limo_bringup/limo_start                  (base, lidar, TFs)
+      - limo_rosa_bridge/limo_gmapping_no_rviz   (online SLAM → /map, no vendor RViz)
+      - limo_bringup/limo_move_base              (navigation on the live map)
+      - astra_camera/dabai_u3                    (640×480 color, 640×400 depth; depth_align on)
+      - rosbridge_server                         (WebSocket, port 9090)
+      - cam_coverage + frontier_explorer         (autonomy_core)
+      - red_cube_detector                        (autonomy_perception)
+      - arm_control + approach_object            (autonomy_manipulation)
+      - rviz_rosa                                (single RViz with rosa_gmapping_markers.rviz)
 
     For a saved map instead: use a static-map launch (map_server + amcl) and omit gmapping.
 
     Remote ROSA: ROS_MASTER_URI → robot; source Noetic; run scripts/run_rosa_with_ros.sh src/rosa_agent.py
   -->
 
-  <!-- Perception (object_finder_node) -->
-  <arg name="object_finder_prompt" default="a water bottle" />
-  <arg name="object_finder_threshold" default="0.15" />
-  <arg name="object_finder_min_hits" default="3" />
-  <arg name="object_finder_show_debug" default="true" />
+  <!-- Perception (red_cube_detector_node) -->
+  <arg name="perception_publish_debug" default="false" />
+  <arg name="perception_min_area_px" default="50" />
+  <arg name="perception_max_area_px" default="4000" />
 
   <arg name="start_rviz" default="true" />
   <arg name="rviz_config" default="$(find limo_rosa_bridge)/rviz/rosa_gmapping_markers.rviz" />
@@ -35,8 +37,9 @@
   <!-- 1) Base + sensors (+ RViz if configured in bringup) -->
   <include file="$(find limo_bringup)/launch/limo_start.launch" />
 
-  <!-- 2) Live mapping: publishes /map (do not combine with static map_server + AMCL) -->
-  <include file="$(find limo_bringup)/launch/limo_gmapping.launch" />
+  <!-- 2) Live mapping: publishes /map (do not combine with static map_server + AMCL).
+       Use the no-RViz variant so we don't spawn a second RViz with the vendor config. -->
+  <include file="$(find limo_rosa_bridge)/launch/limo_gmapping_no_rviz.launch" />
 
   <!-- 3) Navigation on the SLAM map -->
   <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
@@ -53,20 +56,21 @@
 
   <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" />
 
-  <!-- 5) Coverage / exploration helpers (planners off by default) -->
+  <!-- 5) Coverage / exploration helpers (frontier explorer idle until enabled at runtime) -->
   <include file="$(find limo_rosa_bridge)/launch/autonomy_core.launch">
-    <arg name="use_frontier_planner" value="false" />
-    <arg name="use_straight_planner" value="false" />
+    <arg name="enabled_at_start" value="false" />
   </include>
 
-  <!-- 6) OWL object finder -->
+  <!-- 6) Red cube detector -->
   <include file="$(find limo_rosa_bridge)/launch/autonomy_perception.launch">
-    <arg name="prompt" value="$(arg object_finder_prompt)" />
-    <arg name="threshold" value="$(arg object_finder_threshold)" />
-    <arg name="min_hits" value="$(arg object_finder_min_hits)" />
-    <arg name="show_debug_window" value="$(arg object_finder_show_debug)" />
+    <arg name="publish_debug" value="$(arg perception_publish_debug)" />
+    <arg name="min_area_px" value="$(arg perception_min_area_px)" />
+    <arg name="max_area_px" value="$(arg perception_max_area_px)" />
   </include>
 
-  <!-- 7) Known-good RViz config: map + detected object markers enabled by default -->
+  <!-- 7) Manipulation (arm_control + approach_object services) -->
+  <include file="$(find limo_rosa_bridge)/launch/autonomy_manipulation.launch" />
+
+  <!-- 8) Known-good RViz config: map + detected object markers enabled by default -->
   <node if="$(arg start_rviz)" pkg="rviz" type="rviz" name="rviz_rosa" args="-d $(arg rviz_config)" output="screen" />
 </launch>

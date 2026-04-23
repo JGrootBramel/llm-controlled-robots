@@ -76,8 +76,8 @@ cd '${REMOTE_WORKTREE_PATH}/catkin_ws'
 catkin_make
 source devel/setup.bash
 
-echo "Launching rosa_bridge.launch..."
-exec roslaunch limo_rosa_bridge rosa_bridge.launch
+# echo "Launching rosa_bridge.launch..."
+# exec roslaunch limo_rosa_bridge rosa_bridge.launch
 EOF
 
 echo "Sync complete."
