@@ -9,9 +9,10 @@ if vendor_dir not in sys.path:
 import os
 import sys
 import traceback
+import importlib
 from typing import Optional
 from dotenv import load_dotenv
-from tools import *
+from limo_llm_control.tools import *
 
 load_dotenv()  # Load environment variables from .env file if present
 
@@ -43,11 +44,13 @@ except Exception as e:  # pragma: no cover - vendor package may vary
     print("Failed to import 'rosa' package. Ensure vendor/rosa or venv has rosa installed.")
     raise
 
-# Tools: re-exported from limo_llm_control.tools (motion, navigation, perception, diagnostics; rospy).
+# Prefer canonical tools package; keep legacy package as fallback only.
+_TOOL_PACKAGES = ["limo_llm_control.tools"]
 try:
-    import tools  # noqa: F401  # backward compat: tools re-exports from limo_llm_control.tools
+    importlib.import_module("limo_llm_control.tools")
 except Exception as e:
-    print("Warning: could not import 'tools' (limo_llm_control.tools):", e)
+    print("Warning: could not import canonical package 'limo_llm_control.tools':", e)
+    _TOOL_PACKAGES = ["tools"]
 
 OPENAI_API_KEY: Optional[str] = os.environ.get("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
@@ -83,7 +86,7 @@ agent = ROSA(
     ros_version=1,
     llm=llm,
     tools=_REFACTORED_TOOLS,
-    tool_packages=["tools"],
+    tool_packages=_TOOL_PACKAGES,
     blacklist=["rosservice_list"],
     streaming=False,
     verbose=True,
@@ -96,7 +99,7 @@ print("ROSA __tools type:", type(agent._ROSA__tools))
 print("ROSA __tools:", agent._ROSA__tools)
 tools_obj = agent._get_tools(
     ros_version=1,
-    packages=["tools"],
+    packages=_TOOL_PACKAGES,
     tools=_REFACTORED_TOOLS,
     blacklist=[],
 )
