@@ -21,6 +21,7 @@ _KEY_SERVICES = [
     "/exploration_enabled",
     "/exploration_reset",
     "/cam_coverage/reset",
+    "/map_update_manager/save_map",
     "/red_cube_detector/enable",
     "/red_cube_detector/snapshot",
     "/approach_object/approach",

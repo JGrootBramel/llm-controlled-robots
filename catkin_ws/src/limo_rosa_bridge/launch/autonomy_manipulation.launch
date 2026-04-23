@@ -2,8 +2,23 @@
   <!-- Approach (base) + arm control (MyCobot). -->
   <arg name="base_frame" default="base_link" />
   <arg name="map_frame" default="map" />
-  <arg name="standoff" default="0.30" />
-  <arg name="min_standoff" default="0.22" />
+  <!-- Distance (m) from base_link origin to target when the base parks.
+       Cap here is the arm's physical reach (~280 mm from the arm mount).
+       Going much above 0.33 will clamp the grasp inside the safe cube and
+       the gripper will stop short of the target. Raise ``coord_lim_mm``
+       (default 300 mm below) alongside if you push this further. -->
+  <arg name="standoff" default="0.33" />
+  <arg name="min_standoff" default="0.25" />
+  <!-- Half-side of the arm's safe Cartesian cube (mm). MyCobot 280 has a
+       nominal reach of ~280 mm and a usable max closer to 320 mm, so 300
+       is a reasonable headroom bump to pair with the larger standoff. -->
+  <arg name="coord_limit_mm" default="300.0" />
+  <!-- Base-frame point the IK-derived ready pose aims for. Move this
+       forward in lock-step with ``standoff`` so the pre-grasp travel stays
+       short once the wrist is pre-oriented. -->
+  <arg name="ready_point_base_x_m" default="0.23" />
+  <arg name="ready_point_base_y_m" default="0.0" />
+  <arg name="ready_point_base_z_m" default="0.15" />
   <arg name="mycobot_port" default="/dev/ttyACM0" />
   <arg name="mycobot_baud" default="115200" />
   <!-- Physical arm mount yaw (CCW degrees from base_link +X to arm +X).
@@ -35,6 +50,8 @@
     <param name="base_frame" value="$(arg base_frame)" />
     <param name="mount_yaw_deg" value="$(arg mount_yaw_deg)" />
     <param name="approach_mode" value="$(arg approach_mode)" />
+    <param name="coord_limit_mm" value="$(arg coord_limit_mm)" />
+    <rosparam param="ready_point_base_xyz_m" subst_value="true">[$(arg ready_point_base_x_m), $(arg ready_point_base_y_m), $(arg ready_point_base_z_m)]</rosparam>
     <!-- Wire the detector's latched pose straight into the arm node. -->
     <remap from="~target_pose" to="$(arg target_pose_topic)" />
     <!-- Explicit one-shot pose (used by ROSA's pick_at_pose tool). -->

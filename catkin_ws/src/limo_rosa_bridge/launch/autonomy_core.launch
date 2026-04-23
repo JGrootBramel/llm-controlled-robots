@@ -10,6 +10,8 @@
   <arg name="min_frontier_dist_m" default="0.3" />
   <arg name="safety_radius_m" default="0.2" />
   <arg name="enabled_at_start" default="false" />
+  <arg name="map_output_dir" default="$(find limo_rosa_bridge)/maps" />
+  <arg name="default_map_name" default="limo_lab_map" />
 
   <node pkg="limo_rosa_bridge" type="cam_coverage_node.py" name="cam_coverage_node" output="screen">
     <param name="range_m" value="$(arg coverage_range_m)" />
@@ -26,5 +28,11 @@
     <param name="min_frontier_dist_m" value="$(arg min_frontier_dist_m)" />
     <param name="safety_radius_m" value="$(arg safety_radius_m)" />
     <param name="enabled_at_start" value="$(arg enabled_at_start)" />
+  </node>
+
+  <!-- Map save helper exposed as /map_update_manager/save_map (std_srvs/Trigger). -->
+  <node pkg="limo_rosa_bridge" type="map_update_manager_node.py" name="map_update_manager" output="screen">
+    <param name="output_dir" value="$(arg map_output_dir)" />
+    <param name="default_map_name" value="$(arg default_map_name)" />
   </node>
 </launch>

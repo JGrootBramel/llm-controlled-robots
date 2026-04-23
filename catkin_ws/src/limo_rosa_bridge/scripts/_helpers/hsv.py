@@ -21,12 +21,14 @@ except Exception:  # pragma: no cover - cv2 optional on test hosts
     cv2 = None  # type: ignore
 
 
-# Default HSV thresholds tuned on the LIMO Astra Pro in a normally-lit lab.
+# Default HSV thresholds for STRICT red-only detection.
 # Red wraps around H=0/180 in OpenCV so we need two bands.
-DEFAULT_RED_H1 = (0, 10)
-DEFAULT_RED_H2 = (170, 180)
-DEFAULT_RED_S_LOW = 85
-DEFAULT_RED_V_LOW = 65
+# These tighter bounds intentionally reject orange/brown shades by requiring
+# very strong saturation and brightness.
+DEFAULT_RED_H1 = (0, 7)
+DEFAULT_RED_H2 = (173, 180)
+DEFAULT_RED_S_LOW = 140
+DEFAULT_RED_V_LOW = 90
 
 DEFAULT_BLUE_H = (105, 135)
 DEFAULT_BLUE_S_LOW = 70

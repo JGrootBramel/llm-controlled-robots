@@ -27,6 +27,7 @@ from .manipulation import (
 from .mission import explore_and_fetch_all_cubes, fetch_red_cubes, process_clicked_points
 from .motion import drive_distance, turn_in_place
 from .navigation import (
+    build_and_save_map,
     cancel_navigation,
     go_to_map_pose,
     reset_cam_coverage,
@@ -52,6 +53,7 @@ __all__ = [
     "reset_cam_coverage",
     "go_to_map_pose",
     "cancel_navigation",
+    "build_and_save_map",
     # perception
     "enable_red_cube_detector",
     "snapshot_red_cube",

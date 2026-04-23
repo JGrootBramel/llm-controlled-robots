@@ -8,6 +8,7 @@ that stack over topics/services. No subprocess spawning, no SSH.
 from __future__ import annotations
 
 import math
+import time
 
 import rospy
 from actionlib_msgs.msg import GoalID
@@ -22,6 +23,8 @@ from ..ros_clients import ensure_rospy
 _EXPLORATION_ENABLE_SRV = "/exploration_enabled"
 _EXPLORATION_RESET_SRV = "/exploration_reset"
 _CAM_COVERAGE_RESET_SRV = "/cam_coverage/reset"
+_MAP_SAVE_SRV = "/map_update_manager/save_map"
+_MAP_NEXT_NAME_PARAM = "/map_update_manager/next_map_name"
 
 
 def _call_set_bool(service_name: str, value: bool, timeout: float = 2.0) -> str:
@@ -166,3 +169,59 @@ def cancel_navigation() -> str:
         return "Cancelled move_base goal and stopped the base."
     except Exception as exc:
         return f"cancel_navigation failed: {exc}"
+
+
+@tool
+def build_and_save_map(
+    map_name: str = "limo_lab_map",
+    exploration_duration_s: float = 90.0,
+    reset_coverage_first: bool = True,
+    reset_explorer_goal_first: bool = True,
+) -> str:
+    """Explore for a while, then save a new map to ``limo_rosa_bridge/maps``.
+
+    This orchestration tool assumes a live-SLAM launch is running (e.g.
+    ``rosa_bridge.launch``) so ``/map`` is actively updated by gmapping.
+    Workflow: optional reset(s) -> start exploration -> wait -> stop exploration
+    -> call map save service.
+    """
+    ensure_rospy()
+    map_name = (map_name or "").strip()
+    if not map_name:
+        return "Invalid map_name: provide a non-empty map base name."
+
+    duration = max(5.0, float(exploration_duration_s))
+    notes: list[str] = []
+
+    if reset_coverage_first:
+        notes.append(f"coverage_reset={_call_trigger(_CAM_COVERAGE_RESET_SRV)}")
+    if reset_explorer_goal_first:
+        notes.append(f"explorer_reset={_call_trigger(_EXPLORATION_RESET_SRV)}")
+
+    start_msg = _call_set_bool(_EXPLORATION_ENABLE_SRV, True)
+    notes.append(f"start_exploration={start_msg}")
+
+    end_time = time.time() + duration
+    while not rospy.is_shutdown() and time.time() < end_time:
+        rospy.sleep(0.2)
+
+    stop_msg = _call_set_bool(_EXPLORATION_ENABLE_SRV, False)
+    notes.append(f"stop_exploration={stop_msg}")
+
+    try:
+        rospy.set_param(_MAP_NEXT_NAME_PARAM, map_name)
+        rospy.wait_for_service(_MAP_SAVE_SRV, timeout=5.0)
+        resp = rospy.ServiceProxy(_MAP_SAVE_SRV, Trigger)()
+    except Exception as exc:
+        notes.append(f"save_map_error={exc}")
+        return (
+            f"Map exploration finished after {duration:.0f}s, but map save failed. "
+            + "; ".join(notes)
+        )
+
+    prefix = "Saved new map successfully." if resp.success else "Map save failed."
+    return (
+        f"{prefix} map_name='{map_name}', exploration_duration_s={duration:.0f}. "
+        f"save_result={resp.message}. "
+        + "; ".join(notes)
+    )
