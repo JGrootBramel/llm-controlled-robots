@@ -21,6 +21,7 @@ import rospy
 from geometry_msgs.msg import PointStamped, Pose, PoseStamped
 from langchain.tools import tool
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+from std_msgs.msg import Bool
 from std_srvs.srv import SetBool, Trigger
 from tf.transformations import quaternion_from_euler
 
@@ -58,6 +59,32 @@ def _set_bool(service_name: str, value: bool, timeout: float = 2.0) -> str:
         return f"{prefix}: {resp.message}"
     except Exception as exc:
         return f"FAIL: Call to {service_name} failed: {exc}"
+
+
+def _set_bool_with_retry(
+    service_name: str,
+    value: bool,
+    total_timeout_s: float = 20.0,
+    retry_interval_s: float = 1.0,
+) -> str:
+    """Retries SetBool calls during startup races and returns final status."""
+    ensure_rospy()
+    deadline = time.time() + float(total_timeout_s)
+    last_result = ""
+    while time.time() < deadline and not rospy.is_shutdown():
+        # Use a short per-attempt timeout so we can retry quickly.
+        last_result = _set_bool(service_name, value, timeout=min(2.0, retry_interval_s))
+        if last_result.startswith("OK:"):
+            return last_result
+        rospy.sleep(float(retry_interval_s))
+    if last_result:
+        return (
+            f"{last_result} (retried for {total_timeout_s:.1f}s waiting for service startup)"
+        )
+    return (
+        f"FAIL: Service '{service_name}' did not become ready within "
+        f"{total_timeout_s:.1f}s."
+    )
 
 
 def _go_to_map_pose(x: float, y: float, yaw_deg: float) -> str:
@@ -109,6 +136,23 @@ def _publish_dummy_pick_pose() -> str:
     pub.publish(ps)
     rospy.sleep(0.2)  # wait for message to be processed
     return "OK: Published dummy pick pose to /arm_control/target_pose"
+
+
+def _wait_for_found(timeout_s: float) -> bool:
+    """Wait for `/red_cubes/found` to publish True within timeout."""
+    ensure_rospy()
+    deadline = time.time() + float(timeout_s)
+    while time.time() < deadline and not rospy.is_shutdown():
+        remaining = deadline - time.time()
+        if remaining <= 0.0:
+            break
+        try:
+            msg = rospy.wait_for_message("/red_cubes/found", Bool, timeout=remaining)
+        except rospy.ROSException:
+            return False
+        if bool(msg.data):
+            return True
+    return False
 
 
 @tool
@@ -199,13 +243,13 @@ def fetch_red_cubes(
         detection_timeout_s: How long to explore before giving up per cube.
     """
     ensure_rospy()
-    log = [_set_bool("/red_cube_detector/enable", True)]
+    log = [_set_bool_with_retry("/red_cube_detector/enable", True)]
     delivered = 0
 
     for i in range(int(max_cubes)):
-        log.append(_set_bool("/exploration_enabled", True))
+        log.append(_set_bool_with_retry("/exploration_enabled", True))
         found = _wait_for_found(detection_timeout_s)
-        log.append(_set_bool("/exploration_enabled", False))
+        log.append(_set_bool_with_retry("/exploration_enabled", False))
         if not found:
             log.append(f"FAIL: cube #{i + 1} not found within {detection_timeout_s}s")
             break
@@ -213,7 +257,7 @@ def fetch_red_cubes(
         log.append(_trigger("/red_cube_detector/snapshot"))
         log.append(_trigger("/approach_object/approach"))
         log.append(_trigger("/arm_control/pick"))
-        log.append(_publish_delivery_goal(delivery_x, delivery_y, delivery_yaw_deg))
+        log.append(_go_to_map_pose(delivery_x, delivery_y, delivery_yaw_deg))
         rospy.sleep(1.0)
         log.append(_trigger("/arm_control/place"))
         delivered += 1
@@ -352,13 +396,13 @@ def explore_and_fetch_all_cubes(
     sub = rospy.Subscriber("/red_cubes/latest_pose", PoseStamped, cube_callback)
     
     try:
-        log.append(_set_bool("/red_cube_detector/enable", True))
-        log.append(_set_bool("/exploration_enabled", True))
+        log.append(_set_bool_with_retry("/red_cube_detector/enable", True))
+        log.append(_set_bool_with_retry("/exploration_enabled", True))
 
         rospy.sleep(float(exploration_duration_s))
 
-        log.append(_set_bool("/exploration_enabled", False))
-        log.append(_set_bool("/red_cube_detector/enable", False))
+        log.append(_set_bool_with_retry("/exploration_enabled", False))
+        log.append(_set_bool_with_retry("/red_cube_detector/enable", False))
     finally:
         sub.unregister()
 

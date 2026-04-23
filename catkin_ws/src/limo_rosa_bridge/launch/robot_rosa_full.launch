@@ -7,6 +7,7 @@
 
     Optional overrides:
       map_file:=$(rospack find limo_rosa_bridge)/maps/<your_map>.yaml
+      exploration_enabled_at_start:=false
       perception_publish_debug:=true
       perception_min_area_px:=50
       perception_max_area_px:=4000
@@ -38,6 +39,7 @@
        doc="Absolute path to the .yaml map descriptor used by map_server." />
 
   <!-- Perception (red_cube_detector_node) -->
+  <arg name="exploration_enabled_at_start" default="false" />
   <arg name="perception_publish_debug" default="false" />
   <arg name="perception_min_area_px" default="50" />
   <arg name="perception_max_area_px" default="4000" />
@@ -71,7 +73,7 @@
 
   <!-- 5) Coverage / exploration helpers (frontier explorer idle until enabled at runtime) -->
   <include file="$(find limo_rosa_bridge)/launch/autonomy_core.launch">
-    <arg name="enabled_at_start" value="false" />
+    <arg name="enabled_at_start" value="$(arg exploration_enabled_at_start)" />
   </include>
 
   <!-- 6) Red cube detector -->

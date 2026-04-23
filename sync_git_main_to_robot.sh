@@ -144,8 +144,8 @@ echo "Sanity check: locating vendor + our packages..."
 rospack find limo_bringup
 rospack find limo_rosa_bridge
 
-# echo "Launching rosa_bridge.launch..."
-# exec roslaunch limo_rosa_bridge robot_rosa_full.launch
+echo "Launching robot_rosa_full.launch..."
+exec roslaunch limo_rosa_bridge robot_rosa_full.launch
 EOF
 
 echo "Sync complete."

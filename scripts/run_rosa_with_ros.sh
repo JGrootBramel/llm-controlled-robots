@@ -29,13 +29,12 @@ if [[ -f "$WS_SETUP" ]]; then
 fi
 
 export PYTHONPATH="$REPO/src${PYTHONPATH:+:$PYTHONPATH}"
+unset AMENT_PREFIX_PATH
+unset COLCON_PREFIX_PATH
+unset ROS_DOMAIN_ID
 
 if [[ -z "${ROS_MASTER_URI:-}" ]]; then
   echo "Set ROS_MASTER_URI, e.g. export ROS_MASTER_URI=http://192.168.0.105:11311" >&2
-  exit 1
-fi
-if [[ -z "${ROS_IP:-}" && -z "${ROS_HOSTNAME:-}" ]]; then
-  echo "Set ROS_IP (this machine's IP) for ROS 1, e.g. export ROS_IP=192.168.0.50" >&2
   exit 1
 fi
 
