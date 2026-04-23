@@ -3,12 +3,22 @@
 
 Pure manipulation. It does *not* know about colour detection, cameras,
 odometry or move_base — everything it needs to reach for arrives through
-the ``~target_pose`` topic (``geometry_msgs/PoseStamped`` in
-``base_link``).
+two ``geometry_msgs/PoseStamped`` topics:
+
+* ``~target_pose``           — continuous stream from the perception stack
+                               (e.g. ``/red_cubes/latest_pose``).
+* ``~target_pose_override``  — one-shot, externally supplied pose. When
+                               present, it wins for the next pick and is
+                               cleared afterwards. Used by the ``pick_at_pose``
+                               ROSA tool so callers can hand the arm explicit
+                               coordinates without racing the detector.
+
+Both topics may be in any TF frame (transformed into ``base_link`` at
+pick time).
 
 Services (all ``std_srvs/Trigger``):
 
-* ``~pick``      — close gripper on the latest target
+* ``~pick``      — close gripper on the latest target (override > stream)
 * ``~place``     — drop the cube on the left-side tray
 * ``~go_home``   — return to the idle home pose
 """
@@ -39,12 +49,19 @@ class ArmControl:
         self._load_params()
         self._lock = Lock()
         self._latest_target = None
+        self._override_target = None
 
         self.tfbuf = tf2_ros.Buffer(rospy.Duration(10.0))
         self.tfl = tf2_ros.TransformListener(self.tfbuf)
 
         rospy.Subscriber(
             "~target_pose", PoseStamped, self._on_target, queue_size=1
+        )
+        rospy.Subscriber(
+            "~target_pose_override",
+            PoseStamped,
+            self._on_target_override,
+            queue_size=1,
         )
 
         self._mc = self._connect_arm()
@@ -61,17 +78,27 @@ class ArmControl:
         self.speed = int(rospy.get_param("~speed", 40))
         self.place_speed = int(rospy.get_param("~place_speed", 40))
         self.place_gripper_open = int(rospy.get_param("~place_gripper_open", 80))
+        # Physical mount yaw (CCW degrees from base_link +X to arm +X). Set to
+        # 90 for the default LIMO Cobot mount (arm faces robot-left). Changing
+        # this rotates the Cartesian mapping AND the home/place defaults in
+        # one place, so the gripper keeps pointing forward at home regardless.
+        self.mount_yaw_deg = float(
+            rospy.get_param("~mount_yaw_deg", mch.DEFAULT_MOUNT_YAW_DEG)
+        )
         self.place_angles = rospy.get_param(
-            "~place_angles", list(mch.PLACE_ANGLES)
+            "~place_angles", list(mch.default_place_angles(self.mount_yaw_deg))
         )
         self.home_angles = rospy.get_param(
-            "~home_angles", list(mch.HOME_ANGLES)
+            "~home_angles", list(mch.default_home_angles(self.mount_yaw_deg))
         )
         self.coord_lim_mm = float(rospy.get_param("~coord_limit_mm", 280.0))
         self.pre_dy_mm = float(rospy.get_param("~pre_grasp_delta_y_mm", 30.0))
         self.pre_dz_mm = float(rospy.get_param("~pre_grasp_delta_z_mm", 5.0))
         self.grasp_z_adjust_mm = float(
-            rospy.get_param("~grasp_z_adjust_mm", -35.0)
+            rospy.get_param("~grasp_z_adjust_mm", 0.0)
+        )
+        self.ik_verify_tol_mm = float(
+            rospy.get_param("~ik_verify_tol_mm", 15.0)
         )
         self.grasp_rxryrz = (
             int(rospy.get_param("~grasp_coord_rx", mch.GRASP_RXRYRZ[0])),
@@ -100,17 +127,33 @@ class ArmControl:
         with self._lock:
             self._latest_target = msg
 
+    def _on_target_override(self, msg):
+        with self._lock:
+            self._override_target = msg
+        rospy.loginfo(
+            "[arm_control] override target latched: frame=%s xyz=(%.3f, %.3f, %.3f)",
+            msg.header.frame_id,
+            msg.pose.position.x,
+            msg.pose.position.y,
+            msg.pose.position.z,
+        )
+
     def _handle_pick(self, _req):
         if self._mc is None:
             return TriggerResponse(success=False, message="arm not connected")
-        target = self._latest_target_in_base()
+        target, source = self._select_target_in_base()
         if target is None:
             return TriggerResponse(
                 success=False,
-                message="No target pose available in base_link; publish ~target_pose first.",
+                message=(
+                    "No target pose available; publish ~target_pose or "
+                    "~target_pose_override first."
+                ),
             )
         x_m, y_m, z_m = target
-        X_arm, Y_arm, Z_arm = mch.base_to_arm_mm(x_m, y_m, z_m)
+        X_arm, Y_arm, Z_arm = mch.base_to_arm_mm(
+            x_m, y_m, z_m, mount_yaw_deg=self.mount_yaw_deg
+        )
         # Apply static z-adjust and clamp inside the safe cube.
         Z_arm = Z_arm + float(self.grasp_z_adjust_mm)
         limits = mch.GraspLimits(
@@ -128,9 +171,9 @@ class ArmControl:
         return TriggerResponse(
             success=bool(ok),
             message=(
-                f"pick ok at arm_mm=({cx:.0f},{cy:.0f},{cz:.0f})"
+                f"pick ok at arm_mm=({cx:.0f},{cy:.0f},{cz:.0f}) [src={source}]"
                 if ok
-                else "pick failed; see node logs"
+                else f"pick failed [src={source}]; see node logs"
             ),
         )
 
@@ -159,20 +202,74 @@ class ArmControl:
             return TriggerResponse(success=False, message=f"go_home failed: {e}")
 
     # --------------------------------------------------------- primitives
+    def _coords_reached(self, want_xyz_mm):
+        """Return (ok, err_mm, got_coords) after a send_coords move.
+
+        ``None`` if we couldn't read coords back from the arm. Lets us catch
+        silent firmware IK rejections (pymycobot's ``send_coords`` is
+        fire-and-forget over serial, so unreachable targets return without
+        raising but the arm never moves).
+        """
+        try:
+            got = self._mc.get_coords()
+        except Exception as e:
+            rospy.logwarn("[arm_control] get_coords failed: %s", e)
+            return None
+        if not got or len(got) < 3:
+            return None
+        dx = got[0] - want_xyz_mm[0]
+        dy = got[1] - want_xyz_mm[1]
+        dz = got[2] - want_xyz_mm[2]
+        err = math.sqrt(dx * dx + dy * dy + dz * dz)
+        return (err <= self.ik_verify_tol_mm, err, got)
+
     def _execute_pick(self, x_mm, y_mm, z_mm):
         rx, ry, rz = self.grasp_rxryrz
         speed = self.speed
         try:
             self._mc.set_gripper_state(0, 80)
-            # Pre-grasp above/behind the target.
-            self._mc.send_coords(
-                [x_mm, y_mm + self.pre_dy_mm, z_mm + self.pre_dz_mm, rx, ry, rz],
-                speed,
-            )
+            # Pre-grasp above/behind the target. mode=1 = linear Cartesian interp.
+            pre = [
+                x_mm,
+                y_mm + self.pre_dy_mm,
+                z_mm + self.pre_dz_mm,
+                rx, ry, rz,
+            ]
+            self._mc.send_coords(pre, speed, 1)
             time.sleep(2.0)
-            # Descend to grasp.
-            self._mc.send_coords([x_mm, y_mm, z_mm, rx, ry, rz], speed)
+            check = self._coords_reached(pre[:3])
+            if check is None:
+                rospy.logwarn(
+                    "[arm_control] pre-grasp IK verify skipped (no coords read back)"
+                )
+            elif not check[0]:
+                rospy.logerr(
+                    "[arm_control] pre-grasp NOT reached (firmware likely rejected IK): "
+                    "want=%s got=%s err_mm=%.1f",
+                    pre[:3], list(check[2][:3]), check[1],
+                )
+                self._mc.send_angles(list(self.home_angles), 50)
+                time.sleep(1.5)
+                return False
+
+            grasp = [x_mm, y_mm, z_mm, rx, ry, rz]
+            self._mc.send_coords(grasp, speed, 1)
             time.sleep(2.0)
+            check = self._coords_reached(grasp[:3])
+            if check is None:
+                rospy.logwarn(
+                    "[arm_control] grasp IK verify skipped (no coords read back)"
+                )
+            elif not check[0]:
+                rospy.logerr(
+                    "[arm_control] grasp NOT reached (firmware likely rejected IK): "
+                    "want=%s got=%s err_mm=%.1f",
+                    grasp[:3], list(check[2][:3]), check[1],
+                )
+                self._mc.send_angles(list(self.home_angles), 50)
+                time.sleep(1.5)
+                return False
+
             self._mc.set_gripper_state(1, 80)
             time.sleep(1.5)
             # Lift back to home so base can move safely.
@@ -183,11 +280,34 @@ class ArmControl:
             rospy.logerr("[arm_control] pick error: %s", e)
             return False
 
-    def _latest_target_in_base(self):
+    def _select_target_in_base(self):
+        """Pick the pose to grasp at and return it in ``base_link``.
+
+        Override pose wins when set and is consumed (cleared) so the next
+        pick falls back to the perception stream. Returns
+        ``(xyz_tuple_or_None, source_label)``.
+        """
         with self._lock:
-            pose = self._latest_target
-        if pose is None:
-            return None
+            override = self._override_target
+            self._override_target = None
+            stream = self._latest_target
+
+        if override is not None:
+            xyz = self._pose_in_base(override)
+            if xyz is not None:
+                return xyz, "override"
+            rospy.logwarn(
+                "[arm_control] override pose could not be transformed to %s; "
+                "falling back to stream",
+                self.base_frame,
+            )
+
+        if stream is None:
+            return None, "none"
+        xyz = self._pose_in_base(stream)
+        return (xyz, "stream") if xyz is not None else (None, "stream")
+
+    def _pose_in_base(self, pose):
         if pose.header.frame_id == self.base_frame:
             return (pose.pose.position.x, pose.pose.position.y, pose.pose.position.z)
         try:

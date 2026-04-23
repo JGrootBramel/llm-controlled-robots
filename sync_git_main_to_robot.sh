@@ -3,13 +3,19 @@
 set -euo pipefail
 
 # Quick sync script:
-# - Push local main to a temporary branch on the robot
-# - Fast-forward robot main from that temp branch over SSH
+# - Push the selected local branch to a temporary branch on the robot
+# - Fast-forward the robot's matching branch from that temp branch over SSH
 # This avoids "refusing to update checked out branch" on non-bare repos.
+#
+# Usage:
+#   ./sync_git_main_to_robot.sh                  # syncs the current local branch
+#   ./sync_git_main_to_robot.sh <branch-name>    # syncs an explicit local branch
+#
+# The script pushes straight into the robot's on-disk .git over SSH, so the
+# robot does NOT need internet access for this to work.
 
 ROBOT_USER="agilex"
 ROBOT_HOST="192.168.0.105"
-ROBOT_BRANCH="main"
 REMOTE_REPO_PATH="/home/agilex/llm-controlled-robots/.git"
 REMOTE_WORKTREE_PATH="/home/agilex/llm-controlled-robots"
 REMOTE_NAME="robot"
@@ -28,10 +34,27 @@ fi
 
 cd "${SCRIPT_DIR}"
 
-if ! git show-ref --verify --quiet "refs/heads/${ROBOT_BRANCH}"; then
-  echo "Error: local branch '${ROBOT_BRANCH}' does not exist." >&2
+# Branch to sync: explicit arg wins, otherwise use the current local branch.
+if [[ $# -ge 1 && -n "$1" ]]; then
+  LOCAL_BRANCH="$1"
+else
+  LOCAL_BRANCH="$(git symbolic-ref --quiet --short HEAD || true)"
+  if [[ -z "${LOCAL_BRANCH}" ]]; then
+    echo "Error: HEAD is detached. Pass an explicit branch name, e.g.:" >&2
+    echo "  ./sync_git_main_to_robot.sh my-branch" >&2
+    exit 1
+  fi
+fi
+
+ROBOT_BRANCH="${LOCAL_BRANCH}"
+SYNC_BRANCH="sync-from-remote-${LOCAL_BRANCH}"
+
+if ! git show-ref --verify --quiet "refs/heads/${LOCAL_BRANCH}"; then
+  echo "Error: local branch '${LOCAL_BRANCH}' does not exist." >&2
   exit 1
 fi
+
+echo "Syncing local branch '${LOCAL_BRANCH}' -> robot branch '${ROBOT_BRANCH}'"
 
 REMOTE_URL="${ROBOT_USER}@${ROBOT_HOST}:${REMOTE_REPO_PATH}"
 
@@ -46,12 +69,24 @@ else
   git remote add "${REMOTE_NAME}" "${REMOTE_URL}"
 fi
 
-echo "Pushing '${ROBOT_BRANCH}' to robot temporary branch '${SYNC_BRANCH}'..."
-git push "${REMOTE_NAME}" "${ROBOT_BRANCH}:${SYNC_BRANCH}"
+echo "Pushing '${LOCAL_BRANCH}' to robot temporary branch '${SYNC_BRANCH}'..."
+git push "${REMOTE_NAME}" "${LOCAL_BRANCH}:${SYNC_BRANCH}"
 
 echo "Updating robot working tree to '${ROBOT_BRANCH}'..."
-ssh "${ROBOT_USER}@${ROBOT_HOST}" \
-  "cd '${REMOTE_WORKTREE_PATH}' && git checkout '${ROBOT_BRANCH}' && git merge --ff-only '${SYNC_BRANCH}' && git branch -D '${SYNC_BRANCH}'"
+# Create the branch on the robot if it doesn't exist yet, otherwise check it
+# out and fast-forward. Non-FF updates fail loudly so we don't silently drop
+# commits that exist only on the robot.
+ssh "${ROBOT_USER}@${ROBOT_HOST}" bash <<EOF
+set -euo pipefail
+cd '${REMOTE_WORKTREE_PATH}'
+if git show-ref --verify --quiet "refs/heads/${ROBOT_BRANCH}"; then
+  git checkout '${ROBOT_BRANCH}'
+  git merge --ff-only '${SYNC_BRANCH}'
+else
+  git checkout -b '${ROBOT_BRANCH}' '${SYNC_BRANCH}'
+fi
+git branch -D '${SYNC_BRANCH}'
+EOF
 
 echo "Shutting down ROS, rebuilding catkin_ws, and relaunching rosa_bridge on robot..."
 echo "(rosa_bridge.launch will run in the foreground. Press Ctrl-C to stop it.)"

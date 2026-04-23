@@ -5,83 +5,151 @@ cubes, pick them up, and deliver them to a fixed coordinate". Decomposing
 this on the robot would require yet another FSM node, so we keep it on
 the remote side where ROSA can also narrate / reason over each step.
 
-Everything here calls directly into ROS (same way the primitive ROSA
-tools do) so we don't rely on langchain-specific tool call forwarding.
+This version provides a coordinate-based fetching tool that uses stubs
+for underlying actions to demonstrate the mission sequence.
 """
 
 from __future__ import annotations
 
+import json
 import math
 import time
 
+import actionlib
 import rospy
-from actionlib_msgs.msg import GoalID
-from geometry_msgs.msg import PoseStamped, Twist
+from geometry_msgs.msg import PoseStamped
 from langchain.tools import tool
-from std_msgs.msg import Bool
-from std_srvs.srv import SetBool, Trigger
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+from std_srvs.srv import Trigger
 from tf.transformations import quaternion_from_euler
 
 from ..ros_clients import ensure_rospy
 
 
 def _trigger(service_name: str, timeout: float = 2.0) -> str:
+    """Calls a std_srvs/Trigger service and returns a status string."""
+    ensure_rospy()
     try:
         rospy.wait_for_service(service_name, timeout=timeout)
     except Exception:
-        return f"FAIL: '{service_name}' unavailable"
+        return f"FAIL: Service '{service_name}' is unavailable."
     try:
         resp = rospy.ServiceProxy(service_name, Trigger)()
         prefix = "OK" if resp.success else "FAIL"
-        return f"{prefix}: {service_name}: {resp.message}"
+        return f"{prefix}: {resp.message}"
     except Exception as exc:
-        return f"FAIL: {service_name}: {exc}"
+        return f"FAIL: Call to {service_name} failed: {exc}"
 
 
-def _set_bool(service_name: str, value: bool, timeout: float = 2.0) -> str:
-    try:
-        rospy.wait_for_service(service_name, timeout=timeout)
-    except Exception:
-        return f"FAIL: '{service_name}' unavailable"
-    try:
-        resp = rospy.ServiceProxy(service_name, SetBool)(bool(value))
-        prefix = "OK" if resp.success else "FAIL"
-        return f"{prefix}: {service_name}({value}): {resp.message}"
-    except Exception as exc:
-        return f"FAIL: {service_name}({value}): {exc}"
+def _go_to_map_pose(x: float, y: float, yaw_deg: float) -> str:
+    """Navigates the robot to a map pose and waits for completion."""
+    ensure_rospy()
+    client = actionlib.SimpleActionClient("move_base", MoveBaseAction)
+    if not client.wait_for_server(rospy.Duration(5.0)):
+        return "FAIL: move_base action server not available"
 
+    goal = MoveBaseGoal()
+    goal.target_pose.header.frame_id = "map"
+    goal.target_pose.header.stamp = rospy.Time.now()
+    goal.target_pose.pose.position.x = float(x)
+    goal.target_pose.pose.position.y = float(y)
 
-def _wait_for_found(timeout_s: float) -> bool:
-    deadline = time.time() + float(timeout_s)
-    while time.time() < deadline:
-        remain = max(0.1, deadline - time.time())
-        try:
-            msg = rospy.wait_for_message(
-                "/red_cubes/found", Bool, timeout=min(1.0, remain)
-            )
-            if msg.data:
-                return True
-        except Exception:
-            pass
-    return False
-
-
-def _publish_delivery_goal(x: float, y: float, yaw_deg: float) -> str:
-    pub = rospy.Publisher("/move_base_simple/goal", PoseStamped, queue_size=1)
-    rospy.sleep(0.2)
     yaw = float(yaw_deg) * math.pi / 180.0
     qx, qy, qz, qw = quaternion_from_euler(0.0, 0.0, yaw)
+    goal.target_pose.pose.orientation.x = qx
+    goal.target_pose.pose.orientation.y = qy
+    goal.target_pose.pose.orientation.z = qz
+    goal.target_pose.pose.orientation.w = qw
+
+    client.send_goal(goal)
+    if client.wait_for_result(rospy.Duration(60.0)):  # 60s timeout for nav
+        state = client.get_state()
+        # GoalStatus: PENDING, ACTIVE, RECALLED, REJECTED, PREEMPTED, ABORTED, SUCCEEDED, LOST
+        if state == actionlib.GoalStatus.SUCCEEDED:
+            return f"OK: Reached goal ({x:.2f}, {y:.2f})"
+        else:
+            return f"FAIL: Navigation failed with state {state}"
+    else:
+        client.cancel_goal()
+        return "FAIL: Navigation timed out after 60s"
+
+
+def _publish_dummy_pick_pose() -> str:
+    """Publishes a fixed pose in front of the robot for the arm to target."""
+    pub = rospy.Publisher("/arm_control/target_pose", PoseStamped, queue_size=1)
+    rospy.sleep(0.2)  # wait for publisher to connect
+
     ps = PoseStamped()
     ps.header.stamp = rospy.Time.now()
-    ps.header.frame_id = "map"
-    ps.pose.position.x = float(x)
-    ps.pose.position.y = float(y)
-    ps.pose.orientation.x = qx
-    ps.pose.orientation.y = qy
-    ps.pose.orientation.z = qz
-    ps.pose.orientation.w = qw
+    ps.header.frame_id = "base_link"  # arm controller expects pose in base_link
+    ps.pose.position.x = 0.25  # 25cm in front of the robot base
+    ps.pose.position.y = 0.0
+    ps.pose.position.z = 0.05  # 5cm above the ground
+    ps.pose.orientation.w = 1.0  # level gripper
+
     pub.publish(ps)
-    return f"OK: delivery goal published ({x:.2f},{y:.2f},{yaw_deg:.0f}°)"
+    rospy.sleep(0.2)  # wait for message to be processed
+    return "OK: Published dummy pick pose to /arm_control/target_pose"
+
+
+@tool
+def fetch_cubes_at_coordinates(coordinates_json: str) -> str:
+    """
+    Drives to a list of specified map coordinates, attempts a pick, and then a place for each.
+    This is a sequence of stub actions to fetch multiple objects.
+
+    The robot will navigate to each coordinate, then perform a pre-canned 'pick' motion
+    (closing the gripper at a fixed point in front of the robot), and then a pre-canned
+    'place' motion (dropping at a fixed tray location).
+
+    Args:
+        coordinates_json: A JSON string representing a list of objects with 'x' and 'y'
+                          map coordinates. Example: '[{"x": 1.5, "y": -0.5}, {"x": 1.5, "y": 0.5}]'
+    """
+    ensure_rospy()
+    try:
+        coordinates = json.loads(coordinates_json)
+        if not isinstance(coordinates, list):
+            return "FAIL: coordinates_json must be a JSON array."
+    except json.JSONDecodeError:
+        return "FAIL: Invalid JSON in coordinates_json argument."
+
+    log = []
+    placed_count = 0
+
+    for i, coord in enumerate(coordinates):
+        log.append(f"--- Processing cube #{i+1} at {coord} ---")
+        x = coord.get("x")
+        y = coord.get("y")
+        if x is None or y is None:
+            log.append(f"FAIL: Cube #{i+1} is missing 'x' or 'y'.")
+            continue
+
+        # 1. Navigate to the cube's location.
+        nav_result = _go_to_map_pose(x, y, 0.0)  # Navigate to (x,y) with 0 yaw
+        log.append(nav_result)
+        if "FAIL" in nav_result:
+            log.append("Skipping pick/place due to navigation failure.")
+            continue
+
+        # 2. Attempt to pick the object.
+        # To make the 'pick' service work, we publish a dummy pose in front of the robot.
+        log.append(_publish_dummy_pick_pose())
+        pick_result = _trigger("/arm_control/pick")
+        log.append(pick_result)
+
+        # 3. Attempt to place the object.
+        # The existing `/arm_control/place` service moves to a fixed tray location, which is a good stub.
+        if "OK" in pick_result:
+            place_result = _trigger("/arm_control/place")
+            log.append(place_result)
+            if "OK" in place_result:
+                placed_count += 1
+        else:
+            log.append("Skipping place because pick failed.")
+
+    header = f"Mission complete. Attempted to fetch {len(coordinates)} cubes. Successfully placed {placed_count}."
+    return header + "\n" + "\n".join(log)
 
 
 @tool

@@ -23,11 +23,32 @@ _TF_LISTENER = None
 
 
 def _ensure_pub_and_tf() -> None:
+    """Create (or re-create) the ``/cmd_vel`` publisher and TF listener.
+
+    Survives the robot-side stack being relaunched under a long-lived ROSA
+    agent. When roscore or ``limo_bringup`` bounces, rospy's cached
+    Publisher object stays alive in our process but its registration with
+    the (new) master is gone, so ``publish()`` silently goes nowhere. We
+    detect that state via ``get_num_connections() == 0`` and rebuild the
+    Publisher so the next tool call reconnects to ``/limo_base_node``.
+    """
     global _CMD_VEL_PUB, _TF_BUFFER, _TF_LISTENER
     ensure_rospy()
+    if _CMD_VEL_PUB is not None and _CMD_VEL_PUB.get_num_connections() == 0:
+        try:
+            _CMD_VEL_PUB.unregister()
+        except Exception:
+            pass
+        _CMD_VEL_PUB = None
     if _CMD_VEL_PUB is None:
         _CMD_VEL_PUB = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
-        rospy.sleep(0.05)
+        deadline = rospy.Time.now() + rospy.Duration(1.0)
+        while (
+            not rospy.is_shutdown()
+            and _CMD_VEL_PUB.get_num_connections() == 0
+            and rospy.Time.now() < deadline
+        ):
+            rospy.sleep(0.05)
     if _TF_BUFFER is None:
         _TF_BUFFER = tf2_ros.Buffer(cache_time=rospy.Duration(10.0))
         _TF_LISTENER = tf2_ros.TransformListener(_TF_BUFFER)

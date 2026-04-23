@@ -39,16 +39,17 @@ if [[ -z "${ROS_IP:-}" && -z "${ROS_HOSTNAME:-}" ]]; then
   exit 1
 fi
 
-python3 - <<'PY' || {
-  echo "tf2_ros import failed. Map-frame cube tools need ROS Noetic Python. Run:" >&2
-  echo "  sudo apt install -y ros-noetic-tf2-ros" >&2
-  echo "  source /opt/ros/noetic/setup.bash" >&2
-  exit 1
-}
+if ! python3 - <<'PY'
 import tf2_ros
 
 print("tf2_ros: OK (ROSA cube tools use manual transforms; PyKDL not required on this machine)")
 PY
+then
+  echo "tf2_ros import failed. Map-frame cube tools need ROS Noetic Python. Run:" >&2
+  echo "  sudo apt install -y ros-noetic-tf2-ros" >&2
+  echo "  source /opt/ros/noetic/setup.bash" >&2
+  exit 1
+fi
 
 PY=${1:-src/rosa_agent.py}
 shift || true

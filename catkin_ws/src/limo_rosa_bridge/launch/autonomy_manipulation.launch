@@ -2,11 +2,19 @@
   <!-- Approach (base) + arm control (MyCobot). -->
   <arg name="base_frame" default="base_link" />
   <arg name="map_frame" default="map" />
-  <arg name="standoff" default="0.45" />
-  <arg name="min_standoff" default="0.35" />
+  <arg name="standoff" default="0.30" />
+  <arg name="min_standoff" default="0.22" />
   <arg name="mycobot_port" default="/dev/ttyACM0" />
   <arg name="mycobot_baud" default="115200" />
+  <!-- Physical arm mount yaw (CCW degrees from base_link +X to arm +X).
+       90 = arm faces robot-left (LIMO Cobot default, gripper swings via
+       joint 1 = -90 to face forward at home). Change this if the arm is
+       bolted on differently. -->
+  <arg name="mount_yaw_deg" default="90.0" />
   <arg name="target_pose_topic" default="/red_cubes/latest_pose" />
+  <!-- One-shot override topic the LLM tools publish to (pick_at_pose etc.).
+       Defaults to the arm node's private topic so it works without a remap. -->
+  <arg name="target_pose_override_topic" default="/arm_control/target_pose_override" />
 
   <node pkg="limo_rosa_bridge" type="approach_object_node.py" name="approach_object" output="screen">
     <param name="target_topic" value="$(arg target_pose_topic)" />
@@ -20,7 +28,10 @@
     <param name="port" value="$(arg mycobot_port)" />
     <param name="baud" value="$(arg mycobot_baud)" />
     <param name="base_frame" value="$(arg base_frame)" />
+    <param name="mount_yaw_deg" value="$(arg mount_yaw_deg)" />
     <!-- Wire the detector's latched pose straight into the arm node. -->
     <remap from="~target_pose" to="$(arg target_pose_topic)" />
+    <!-- Explicit one-shot pose (used by ROSA's pick_at_pose tool). -->
+    <remap from="~target_pose_override" to="$(arg target_pose_override_topic)" />
   </node>
 </launch>

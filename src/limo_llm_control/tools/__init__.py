@@ -20,6 +20,7 @@ from .manipulation import (
     approach_object,
     arm_go_home,
     cancel_approach,
+    pick_at_pose,
     pick_object,
     place_object,
 )
@@ -60,6 +61,7 @@ __all__ = [
     "approach_object",
     "cancel_approach",
     "pick_object",
+    "pick_at_pose",
     "place_object",
     "arm_go_home",
     # mission
