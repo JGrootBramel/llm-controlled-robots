@@ -88,7 +88,10 @@ class ArmControl:
         self.pre_dy_mm = float(rospy.get_param("~pre_grasp_delta_y_mm", 30.0))
         self.pre_dz_mm = float(rospy.get_param("~pre_grasp_delta_z_mm", 5.0))
         self.grasp_z_adjust_mm = float(
-            rospy.get_param("~grasp_z_adjust_mm", -35.0)
+            rospy.get_param("~grasp_z_adjust_mm", 0.0)
+        )
+        self.ik_verify_tol_mm = float(
+            rospy.get_param("~ik_verify_tol_mm", 15.0)
         )
         self.grasp_rxryrz = (
             int(rospy.get_param("~grasp_coord_rx", mch.GRASP_RXRYRZ[0])),
@@ -190,20 +193,74 @@ class ArmControl:
             return TriggerResponse(success=False, message=f"go_home failed: {e}")
 
     # --------------------------------------------------------- primitives
+    def _coords_reached(self, want_xyz_mm):
+        """Return (ok, err_mm, got_coords) after a send_coords move.
+
+        ``None`` if we couldn't read coords back from the arm. Lets us catch
+        silent firmware IK rejections (pymycobot's ``send_coords`` is
+        fire-and-forget over serial, so unreachable targets return without
+        raising but the arm never moves).
+        """
+        try:
+            got = self._mc.get_coords()
+        except Exception as e:
+            rospy.logwarn("[arm_control] get_coords failed: %s", e)
+            return None
+        if not got or len(got) < 3:
+            return None
+        dx = got[0] - want_xyz_mm[0]
+        dy = got[1] - want_xyz_mm[1]
+        dz = got[2] - want_xyz_mm[2]
+        err = math.sqrt(dx * dx + dy * dy + dz * dz)
+        return (err <= self.ik_verify_tol_mm, err, got)
+
     def _execute_pick(self, x_mm, y_mm, z_mm):
         rx, ry, rz = self.grasp_rxryrz
         speed = self.speed
         try:
             self._mc.set_gripper_state(0, 80)
-            # Pre-grasp above/behind the target.
-            self._mc.send_coords(
-                [x_mm, y_mm + self.pre_dy_mm, z_mm + self.pre_dz_mm, rx, ry, rz],
-                speed,
-            )
+            # Pre-grasp above/behind the target. mode=1 = linear Cartesian interp.
+            pre = [
+                x_mm,
+                y_mm + self.pre_dy_mm,
+                z_mm + self.pre_dz_mm,
+                rx, ry, rz,
+            ]
+            self._mc.send_coords(pre, speed, 1)
             time.sleep(2.0)
-            # Descend to grasp.
-            self._mc.send_coords([x_mm, y_mm, z_mm, rx, ry, rz], speed)
+            check = self._coords_reached(pre[:3])
+            if check is None:
+                rospy.logwarn(
+                    "[arm_control] pre-grasp IK verify skipped (no coords read back)"
+                )
+            elif not check[0]:
+                rospy.logerr(
+                    "[arm_control] pre-grasp NOT reached (firmware likely rejected IK): "
+                    "want=%s got=%s err_mm=%.1f",
+                    pre[:3], list(check[2][:3]), check[1],
+                )
+                self._mc.send_angles(list(self.home_angles), 50)
+                time.sleep(1.5)
+                return False
+
+            grasp = [x_mm, y_mm, z_mm, rx, ry, rz]
+            self._mc.send_coords(grasp, speed, 1)
             time.sleep(2.0)
+            check = self._coords_reached(grasp[:3])
+            if check is None:
+                rospy.logwarn(
+                    "[arm_control] grasp IK verify skipped (no coords read back)"
+                )
+            elif not check[0]:
+                rospy.logerr(
+                    "[arm_control] grasp NOT reached (firmware likely rejected IK): "
+                    "want=%s got=%s err_mm=%.1f",
+                    grasp[:3], list(check[2][:3]), check[1],
+                )
+                self._mc.send_angles(list(self.home_angles), 50)
+                time.sleep(1.5)
+                return False
+
             self._mc.set_gripper_state(1, 80)
             time.sleep(1.5)
             # Lift back to home so base can move safely.
