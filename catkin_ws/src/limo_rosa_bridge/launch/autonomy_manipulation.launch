@@ -2,8 +2,8 @@
   <!-- Approach (base) + arm control (MyCobot). -->
   <arg name="base_frame" default="base_link" />
   <arg name="map_frame" default="map" />
-  <arg name="standoff" default="0.45" />
-  <arg name="min_standoff" default="0.35" />
+  <arg name="standoff" default="0.30" />
+  <arg name="min_standoff" default="0.22" />
   <arg name="mycobot_port" default="/dev/ttyACM0" />
   <arg name="mycobot_baud" default="115200" />
   <arg name="target_pose_topic" default="/red_cubes/latest_pose" />
