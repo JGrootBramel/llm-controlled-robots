@@ -14,10 +14,12 @@ from __future__ import annotations
 import json
 import math
 import time
+import queue
 
 import actionlib
 import rospy
 from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PointStamped
 from langchain.tools import tool
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from std_srvs.srv import Trigger
@@ -84,7 +86,7 @@ def _publish_dummy_pick_pose() -> str:
     ps.header.frame_id = "base_link"  # arm controller expects pose in base_link
     ps.pose.position.x = 0.25  # 25cm in front of the robot base
     ps.pose.position.y = 0.0
-    ps.pose.position.z = 0.05  # 5cm above the ground
+    ps.pose.position.z = 0.10  # 5cm above the ground
     ps.pose.orientation.w = 1.0  # level gripper
 
     pub.publish(ps)
@@ -200,4 +202,84 @@ def fetch_red_cubes(
         delivered += 1
 
     header = f"fetch_red_cubes: delivered {delivered}/{max_cubes}"
+    return header + "\n" + "\n".join(log)
+
+
+@tool
+def process_clicked_points(wait_timeout_s: float = 60.0, max_points: int = 10) -> str:
+    """Wait for points to be clicked in RViz ('Publish Point') and fetch them one by one.
+    
+    This tool subscribes to the '/clicked_point' topic. It will wait up to wait_timeout_s 
+    for the first point. As points are clicked, the robot will drive to approximately that 
+    position, attempt to pick at that explicit 3D coordinate, and place the object. 
+    It tackles them one after the other, continuing even if one fails.
+    
+    Args:
+        wait_timeout_s: How long to wait for the FIRST point before giving up.
+        max_points: Maximum number of points to process.
+    """
+    ensure_rospy()
+
+    q = queue.Queue()
+    def cb(msg: PointStamped):
+        q.put(msg)
+        
+    sub = rospy.Subscriber("/clicked_point", PointStamped, cb)
+    
+    log = []
+    placed_count = 0
+    processed_count = 0
+    
+    try:
+        while processed_count < max_points:
+            timeout = float(wait_timeout_s) if processed_count == 0 else 5.0
+            try:
+                pt = q.get(timeout=timeout)
+            except queue.Empty:
+                if processed_count == 0:
+                    return "FAIL: No points clicked in RViz within the timeout."
+                else:
+                    log.append("No more points clicked in queue. Finishing up.")
+                    break
+                    
+            processed_count += 1
+            log.append(f"--- Processing clicked point #{processed_count} at ({pt.point.x:.2f}, {pt.point.y:.2f}) ---")
+            
+            # 1. Drive to standoff pose (0.25m away in -x direction, facing +x)
+            standoff_x = pt.point.x - 0.25
+            standoff_y = pt.point.y
+            
+            nav_result = _go_to_map_pose(standoff_x, standoff_y, 0.0)
+            log.append(nav_result)
+            if "FAIL" in nav_result:
+                log.append("Skipping pick due to navigation failure.")
+                continue
+            
+            # 2. Pick at explicit pose
+            pub = rospy.Publisher("/arm_control/target_pose_override", PoseStamped, queue_size=1, latch=True)
+            rospy.sleep(0.2)
+            pose = PoseStamped()
+            pose.header = pt.header
+            pose.pose.position = pt.point
+            pose.pose.position.z = 0.05  # Rough height for the cube to avoid hitting the floor
+            pose.pose.orientation.w = 1.0
+            pub.publish(pose)
+            rospy.sleep(0.2)
+            
+            pick_result = _trigger("/arm_control/pick")
+            log.append(pick_result)
+            
+            # 3. Place
+            if "OK" in pick_result:
+                place_result = _trigger("/arm_control/place")
+                log.append(place_result)
+                if "OK" in place_result:
+                    placed_count += 1
+            else:
+                log.append("Skipping place because pick failed.")
+                
+    finally:
+        sub.unregister()
+
+    header = f"Mission complete. Processed {processed_count} clicked points. Successfully placed {placed_count}."
     return header + "\n" + "\n".join(log)

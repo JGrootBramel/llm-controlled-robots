@@ -25,6 +25,7 @@ from .manipulation import (
     place_object,
 )
 from .mission import fetch_red_cubes
+from .mission import fetch_red_cubes, process_clicked_points
 from .motion import drive_distance, turn_in_place
 from .navigation import (
     cancel_navigation,
@@ -66,6 +67,7 @@ __all__ = [
     "arm_go_home",
     # mission
     "fetch_red_cubes",
+    "process_clicked_points",
     # diagnostics
     "halt_robot",
     "stop_autonomy_nodes",
