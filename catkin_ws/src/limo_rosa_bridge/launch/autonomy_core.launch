@@ -9,7 +9,7 @@
   <arg name="global_costmap_topic" default="/move_base/global_costmap/costmap" />
   <arg name="min_frontier_dist_m" default="0.3" />
   <arg name="safety_radius_m" default="0.2" />
-  <arg name="enabled_at_start" default="true" />
+  <arg name="enabled_at_start" default="false" />
 
   <node pkg="limo_rosa_bridge" type="cam_coverage_node.py" name="cam_coverage_node" output="screen">
     <param name="range_m" value="$(arg coverage_range_m)" />
