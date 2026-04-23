@@ -1,7 +1,39 @@
 <launch>
-  <!-- Backward-compatible entry point: full robot stack lives in robot_rosa_full.launch -->
-  <arg name="map_yaml" default="$(find limo_rosa_bridge)/launch/limo_lab_map.yaml" />
-  <include file="$(find limo_rosa_bridge)/launch/robot_rosa_full.launch">
-    <arg name="map_yaml" value="$(arg map_yaml)" />
-  </include>
+  <!--
+    Launch file to run the LIMO robot with a pre-built map for localization and navigation.
+    This is used when you want ROSA to navigate using map coordinates, as described
+    in the robot_launch_runbook.md.
+  -->
+
+  <!-- Arguments -->
+  <arg name="map_file" default="$(find limo_rosa_bridge)/maps/limo_lab_map.yaml" doc="Path to the map file to be used."/>
+  <arg name="open_rviz" default="true" doc="Set to false to prevent RViz from launching."/>
+
+  <!-- Limo Bringup: Starts the basic robot drivers -->
+  <include file="$(find limo_bringup)/launch/limo_start.launch" />
+
+  <!-- Map Server: Loads the pre-built map -->
+  <node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
+
+  <!-- AMCL: Adaptive Monte Carlo Localization for localizing the robot in the map -->
+  <include file="$(find limo_bringup)/launch/limo_amcl.launch" />
+
+  <!-- Move Base: The navigation stack that plans paths -->
+  <include file="$(find limo_bringup)/launch/limo_move_base.launch" />
+
+  <!-- Camera Driver -->
+  <include file="$(find astra_camera)/launch/astra_pro.launch" />
+
+  <!-- Rosbridge: Provides a WebSocket interface to ROS -->
+  <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch" />
+
+  <!-- Autonomy nodes required by ROSA tools -->
+  <include file="$(find limo_rosa_bridge)/launch/autonomy_core.launch" />
+  <include file="$(find limo_rosa_bridge)/launch/autonomy_perception.launch" />
+
+  <!-- RViz: Visualization tool -->
+  <group if="$(arg open_rviz)">
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find limo_rosa_bridge)/rviz/nav.rviz" required="true" />
+  </group>
+
 </launch>
