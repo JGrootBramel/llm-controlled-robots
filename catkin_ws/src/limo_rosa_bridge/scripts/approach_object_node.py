@@ -109,6 +109,9 @@ class ApproachObject:
         self.final_extra_forward_m = float(
             rospy.get_param("~final_extra_forward_m", 0.05)
         )
+        self.guard_blocked_success_distance_m = float(
+            rospy.get_param("~guard_blocked_success_distance_m", 0.33)
+        )
         self.close_in_without_standoff_enabled = bool(
             rospy.get_param("~close_in_without_standoff_enabled", True)
         )
@@ -168,6 +171,7 @@ class ApproachObject:
             message=(
                 f"Approached target at ({end_target.pose.position.x:.2f}, "
                 f"{end_target.pose.position.y:.2f}, {end_target.pose.position.z:.2f}) "
+                f"(guard_success_d={self.guard_blocked_success_distance_m:.2f} m) "
                 f"and drove an extra {self.final_extra_forward_m:.2f} m."
             ),
         )
@@ -210,6 +214,17 @@ class ApproachObject:
             if self.close_in_guard_enabled:
                 guard_ok, why = self._front_clearance_ok()
                 if not guard_ok:
+                    # Safety-first stop: if guard blocks but we're already within
+                    # a graspable distance, stop here and report success.
+                    if d <= self.guard_blocked_success_distance_m:
+                        rospy.logwarn(
+                            "[approach_object] guard blocked at d=%.2f; "
+                            "treating as success (>= safe grasp standoff).",
+                            d,
+                        )
+                        self.pub_cmd.publish(Twist())
+                        break
+
                     near_target = d <= self.fallback_force_closein_near_target_m
                     if not near_target:
                         rospy.logwarn("[approach_object] blocked while approaching: %s", why)

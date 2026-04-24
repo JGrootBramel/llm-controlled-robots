@@ -8,7 +8,7 @@
        the gripper will stop short of the target. Raise ``coord_lim_mm``
        (default 300 mm below) alongside if you push this further. -->
   <arg name="standoff" default="0.25" />
-  <arg name="min_standoff" default="0.25" />
+  <arg name="min_standoff" default="0.30" />
   <!-- Smarter close-in: enabled by default, but guarded by front lidar so the
        base stops if something (e.g., the support box) is in front. -->
   <arg name="close_in_enabled" default="true" />
@@ -29,8 +29,10 @@
   <arg name="move_base_timeout_s" default="8.0" />
   <arg name="close_in_without_standoff_enabled" default="false" />
   <arg name="close_in_without_standoff_max_dist_m" default="3.0" />
-  <arg name="fallback_force_closein_near_target_m" default="0.40" />
+  <arg name="fallback_force_closein_near_target_m" default="0.34" />
   <arg name="fallback_force_closein_speed" default="0.04" />
+  <!-- If guard is active but we are already this close, stop and continue to pick. -->
+  <arg name="guard_blocked_success_distance_m" default="0.33" />
   <!-- After reaching min_standoff, drive a final short nudge forward. -->
   <arg name="final_extra_forward_m" default="0.00" />
   <!-- Half-side of the arm's safe Cartesian cube (mm). MyCobot 280 has a
@@ -96,6 +98,7 @@
     <param name="close_in_without_standoff_max_dist_m" value="$(arg close_in_without_standoff_max_dist_m)" />
     <param name="fallback_force_closein_near_target_m" value="$(arg fallback_force_closein_near_target_m)" />
     <param name="fallback_force_closein_speed" value="$(arg fallback_force_closein_speed)" />
+    <param name="guard_blocked_success_distance_m" value="$(arg guard_blocked_success_distance_m)" />
     <param name="final_extra_forward_m" value="$(arg final_extra_forward_m)" />
   </node>
 
