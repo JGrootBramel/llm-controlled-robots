@@ -210,14 +210,22 @@ class ApproachObject:
             if self.close_in_guard_enabled:
                 guard_ok, why = self._front_clearance_ok()
                 if not guard_ok:
-                    rospy.logwarn("[approach_object] blocked while approaching: %s", why)
-                    self.pub_cmd.publish(Twist())
-                    if last_distance is None:
-                        return False, last_target, f"blocked by guard: {why}"
-                    return (
-                        False,
-                        last_target,
-                        f"blocked by guard at {last_distance:.2f} m: {why}",
+                    near_target = d <= self.fallback_force_closein_near_target_m
+                    if not near_target:
+                        rospy.logwarn("[approach_object] blocked while approaching: %s", why)
+                        self.pub_cmd.publish(Twist())
+                        if last_distance is None:
+                            return False, last_target, f"blocked by guard: {why}"
+                        return (
+                            False,
+                            last_target,
+                            f"blocked by guard at {last_distance:.2f} m: {why}",
+                        )
+                    rospy.logwarn_throttle(
+                        1.0,
+                        "[approach_object] guard blocked near target "
+                        "(d=%.2f), forcing slow close-in.",
+                        d,
                     )
 
             err = self._bearing_error_to_target(live_target)
@@ -231,7 +239,14 @@ class ApproachObject:
                     self.align_angular_speed if err > 0.0 else -self.align_angular_speed
                 )
             else:
-                tw.linear.x = float(self.close_in_speed)
+                guard_ok_linear = True
+                if self.close_in_guard_enabled:
+                    guard_ok_linear, _ = self._front_clearance_ok()
+                tw.linear.x = float(
+                    self.close_in_speed
+                    if guard_ok_linear
+                    else self.fallback_force_closein_speed
+                )
             self.pub_cmd.publish(tw)
             rate.sleep()
 

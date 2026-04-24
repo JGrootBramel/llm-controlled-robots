@@ -29,7 +29,7 @@
   <arg name="move_base_timeout_s" default="8.0" />
   <arg name="close_in_without_standoff_enabled" default="true" />
   <arg name="close_in_without_standoff_max_dist_m" default="3.0" />
-  <arg name="fallback_force_closein_near_target_m" default="0.30" />
+  <arg name="fallback_force_closein_near_target_m" default="0.45" />
   <arg name="fallback_force_closein_speed" default="0.04" />
   <!-- After reaching min_standoff, drive a final short nudge forward. -->
   <arg name="final_extra_forward_m" default="0.05" />
