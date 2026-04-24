@@ -129,6 +129,9 @@ class ArmControl:
         self.simple_pick_enabled = bool(
             rospy.get_param("~simple_pick_enabled", True)
         )
+        self.simple_pick_skip_ready = bool(
+            rospy.get_param("~simple_pick_skip_ready", True)
+        )
         self.ik_verify_tol_mm = float(
             rospy.get_param("~ik_verify_tol_mm", 15.0)
         )
@@ -635,8 +638,9 @@ class ArmControl:
         try:
             self._mc.set_gripper_state(0, 100)
             time.sleep(0.6)
-            self._mc.send_angles(list(self.ready_angles), max(20, speed // 2))
-            time.sleep(2.0)
+            if not self.simple_pick_skip_ready:
+                self._mc.send_angles(list(self.ready_angles), max(20, speed // 2))
+                time.sleep(2.0)
             grasp = [x_mm, y_mm, z_mm, rx, ry, rz]
             # Linear Cartesian move to the exact target point.
             self._mc.send_coords(grasp, speed, 1)

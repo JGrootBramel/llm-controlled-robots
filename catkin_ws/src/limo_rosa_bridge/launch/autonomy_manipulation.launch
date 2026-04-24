@@ -72,6 +72,7 @@
   <arg name="min_valid_target_z_m" default="0.03" />
   <arg name="fallback_target_z_m" default="0.08" />
   <arg name="simple_pick_enabled" default="true" />
+  <arg name="simple_pick_skip_ready" default="true" />
   <arg name="target_pose_topic" default="/red_cubes/latest_pose" />
   <!-- One-shot override topic the LLM tools publish to (pick_at_pose etc.).
        Defaults to the arm node's private topic so it works without a remap. -->
@@ -113,6 +114,7 @@
     <param name="min_valid_target_z_m" value="$(arg min_valid_target_z_m)" />
     <param name="fallback_target_z_m" value="$(arg fallback_target_z_m)" />
     <param name="simple_pick_enabled" value="$(arg simple_pick_enabled)" />
+    <param name="simple_pick_skip_ready" value="$(arg simple_pick_skip_ready)" />
     <param name="place_speed" value="$(arg place_speed)" />
     <param name="place_gripper_open" value="$(arg place_gripper_open)" />
     <rosparam if="$(arg use_custom_arm_angles)" param="place_angles" subst_value="true">$(arg place_angles)</rosparam>
