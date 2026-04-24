@@ -103,7 +103,7 @@ class ArmControl:
         self.pre_dy_mm = float(rospy.get_param("~pre_grasp_delta_y_mm", 30.0))
         self.pre_dz_mm = float(rospy.get_param("~pre_grasp_delta_z_mm", 5.0))
         self.grasp_z_adjust_mm = float(
-            rospy.get_param("~grasp_z_adjust_mm", 0.0)
+            rospy.get_param("~grasp_z_adjust_mm", 140.0)
         )
         self.ik_verify_tol_mm = float(
             rospy.get_param("~ik_verify_tol_mm", 15.0)
@@ -180,17 +180,27 @@ class ArmControl:
                 float(self.grasp_rxryrz[1]),
                 float(self.grasp_rxryrz[2]),
             ]
-            solved = self._mc.solve_inv_kinematics(target, list(self.home_angles))
-            if solved and len(solved) == 6 and any(abs(a) > 1e-6 for a in solved):
-                rospy.loginfo(
-                    "[arm_control] ready pose via IK: %s (target arm_mm=%s)",
-                    ["%.1f" % a for a in solved],
-                    ["%.0f" % v for v in target[:3]],
-                )
-                return [float(a) for a in solved]
+            solved = self._mc.solve_inv_kinematics(
+                target, list(self.home_angles)
+            )
+            # pymycobot versions differ: some return 6 floats, others an int
+            # error code or another type — never call len() blindly.
+            if isinstance(solved, (list, tuple)) and len(solved) == 6:
+                try:
+                    sol_f = [float(a) for a in solved]
+                except (TypeError, ValueError):
+                    sol_f = None
+                if sol_f and any(abs(a) > 1e-6 for a in sol_f):
+                    rospy.loginfo(
+                        "[arm_control] ready pose via IK: %s (target arm_mm=%s)",
+                        ["%.1f" % a for a in sol_f],
+                        ["%.0f" % v for v in target[:3]],
+                    )
+                    return sol_f
             rospy.logwarn(
-                "[arm_control] solve_inv_kinematics returned %s; using fallback %s",
-                solved, fallback,
+                "[arm_control] solve_inv_kinematics returned %r; using fallback %s",
+                solved,
+                fallback,
             )
         except Exception as e:
             rospy.logwarn(
@@ -221,6 +231,15 @@ class ArmControl:
         if target is None:
             return None
         x_m, y_m, z_m = target
+        if z_m < 0.05:
+            rospy.logwarn_throttle(
+                60.0,
+                "[arm_control] target z in base_link=%.3f m is very low (cube on the "
+                "floor in TF?). Pre-grasp Z≈%.0f mm in arm frame is often unreachable; "
+                "fix depth/TF height or add ~grasp_z_adjust_mm (mm toward the table).",
+                z_m,
+                z_m * 1000.0 + float(self.grasp_z_adjust_mm),
+            )
         X_arm, Y_arm, Z_arm = mch.base_to_arm_mm(
             x_m, y_m, z_m, mount_yaw_deg=self.mount_yaw_deg
         )

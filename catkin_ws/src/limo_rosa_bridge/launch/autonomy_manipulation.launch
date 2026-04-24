@@ -42,6 +42,10 @@
        1 = linear Cartesian (straight-line but only safe once the ready
        pose has pre-oriented the wrist). -->
   <arg name="approach_mode" default="0" />
+  <!-- Added to arm-frame Z (mm) after map/base_link -> arm mapping. Use when
+       /red_cubes/latest_pose has wrong z (e.g. always 0 in map). Typical
+       table-top: try 100–200 and tune from grasp logs / reach. -->
+  <arg name="grasp_z_adjust_mm" default="140.0" />
   <arg name="target_pose_topic" default="/red_cubes/latest_pose" />
   <!-- One-shot override topic the LLM tools publish to (pick_at_pose etc.).
        Defaults to the arm node's private topic so it works without a remap. -->
@@ -69,6 +73,7 @@
     <param name="mount_yaw_deg" value="$(arg mount_yaw_deg)" />
     <param name="approach_mode" value="$(arg approach_mode)" />
     <param name="coord_limit_mm" value="$(arg coord_limit_mm)" />
+    <param name="grasp_z_adjust_mm" value="$(arg grasp_z_adjust_mm)" />
     <rosparam param="ready_point_base_xyz_m" subst_value="true">[$(arg ready_point_base_x_m), $(arg ready_point_base_y_m), $(arg ready_point_base_z_m)]</rosparam>
     <!-- Wire the detector's latched pose straight into the arm node. -->
     <remap from="~target_pose" to="$(arg target_pose_topic)" />
