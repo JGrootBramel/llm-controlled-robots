@@ -137,6 +137,7 @@ def test_get_latest_red_cube_timeout_message(_wait):
         ("approach_object", "/approach_object/approach"),
         ("cancel_approach", "/approach_object/cancel"),
         ("pick_object", "/arm_control/pick"),
+        ("pick_object_vendor_sync", "/arm_control/pick_vendor_sync"),
         ("place_object", "/arm_control/place"),
         ("arm_go_home", "/arm_control/go_home"),
     ],

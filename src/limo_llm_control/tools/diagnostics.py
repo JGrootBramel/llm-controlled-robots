@@ -27,6 +27,7 @@ _KEY_SERVICES = [
     "/approach_object/approach",
     "/approach_object/cancel",
     "/arm_control/pick",
+    "/arm_control/pick_vendor_sync",
     "/arm_control/place",
     "/arm_control/go_home",
 ]
@@ -62,6 +63,7 @@ _HEALTH_OPTIONAL_TOPICS = [
 _HEALTH_OPTIONAL_SERVICES = [
     "/approach_object/approach",
     "/arm_control/pick",
+    "/arm_control/pick_vendor_sync",
 ]
 
 

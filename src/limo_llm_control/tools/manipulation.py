@@ -11,6 +11,7 @@ from ..ros_clients import ensure_rospy
 
 
 _PICK_SRV = "/arm_control/pick"
+_PICK_VENDOR_SYNC_SRV = "/arm_control/pick_vendor_sync"
 _PLACE_SRV = "/arm_control/place"
 _HOME_SRV = "/arm_control/go_home"
 _APPROACH_SRV = "/approach_object/approach"
@@ -59,6 +60,19 @@ def pick_object() -> str:
     the detector's ``/red_cubes/latest_pose``).
     """
     return _trigger(_PICK_SRV)
+
+
+@tool
+def pick_object_vendor_sync() -> str:
+    """Pick using pymycobot blocking moves (vendor sync API).
+
+    Same target sources as ``pick_object`` (stream on ``~target_pose`` or
+    one-shot ``/arm_control/target_pose_override``). Calls
+    ``/arm_control/pick_vendor_sync`` so the arm uses ``sync_send_coords``
+    / ``sync_send_angles`` instead of async ``send_coords`` + sleeps.
+    Use to compare behavior against the default pick when debugging grasps.
+    """
+    return _trigger(_PICK_VENDOR_SYNC_SRV)
 
 
 @tool

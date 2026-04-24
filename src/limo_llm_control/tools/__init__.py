@@ -27,6 +27,7 @@ from .manipulation import (
     cancel_approach,
     pick_at_pose,
     pick_object,
+    pick_object_vendor_sync,
     place_object,
 )
 from .mission import explore_and_fetch_all_cubes, fetch_red_cubes, process_clicked_points
@@ -68,6 +69,7 @@ __all__ = [
     "approach_object",
     "cancel_approach",
     "pick_object",
+    "pick_object_vendor_sync",
     "pick_at_pose",
     "place_object",
     "arm_go_home",

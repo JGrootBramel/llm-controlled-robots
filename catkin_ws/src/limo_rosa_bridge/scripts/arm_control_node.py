@@ -18,11 +18,15 @@ pick time).
 
 Services (all ``std_srvs/Trigger``):
 
-* ``~pick``      — close gripper on the latest target (override > stream)
-* ``~place``     — drop the cube on the left-side tray
-* ``~go_home``   — return to the idle home pose
+* ``~pick``              — close gripper on the latest target (override > stream)
+* ``~pick_vendor_sync`` — same target selection as ``~pick`` but moves use
+                          pymycobot ``sync_send_coords`` / ``sync_send_angles``
+                          (vendor blocking APIs) for A/B testing
+* ``~place``             — drop the cube on the left-side tray
+* ``~go_home``           — return to the idle home pose
 """
 
+import inspect
 import math
 import os
 import sys
@@ -68,6 +72,9 @@ class ArmControl:
         self.ready_angles = self._compute_ready_angles()
 
         rospy.Service("~pick", Trigger, self._handle_pick)
+        rospy.Service(
+            "~pick_vendor_sync", Trigger, self._handle_pick_vendor_sync
+        )
         rospy.Service("~place", Trigger, self._handle_place)
         rospy.Service("~go_home", Trigger, self._handle_home)
 
@@ -118,6 +125,9 @@ class ArmControl:
             "~ready_point_base_xyz_m", list(mch.DEFAULT_READY_POINT_BASE_M)
         )
         self._ready_angles_override = rospy.get_param("~ready_angles", None)
+        self.vendor_sync_timeout_s = float(
+            rospy.get_param("~vendor_sync_timeout_s", 20.0)
+        )
 
     # ---------------------------------------------------------- arm wiring
     def _connect_arm(self):
@@ -205,23 +215,15 @@ class ArmControl:
             msg.pose.position.z,
         )
 
-    def _handle_pick(self, _req):
-        if self._mc is None:
-            return TriggerResponse(success=False, message="arm not connected")
+    def _resolve_pick_arm_mm(self):
+        """Return ``(cx, cy, cz, source)`` in arm millimetres or ``None`` if no target."""
         target, source = self._select_target_in_base()
         if target is None:
-            return TriggerResponse(
-                success=False,
-                message=(
-                    "No target pose available; publish ~target_pose or "
-                    "~target_pose_override first."
-                ),
-            )
+            return None
         x_m, y_m, z_m = target
         X_arm, Y_arm, Z_arm = mch.base_to_arm_mm(
             x_m, y_m, z_m, mount_yaw_deg=self.mount_yaw_deg
         )
-        # Apply static z-adjust and clamp inside the safe cube.
         Z_arm = Z_arm + float(self.grasp_z_adjust_mm)
         limits = mch.GraspLimits(
             coord_lim_mm=self.coord_lim_mm,
@@ -234,13 +236,62 @@ class ArmControl:
                 "[arm_control] grasp coords clamped: (%.1f,%.1f,%.1f) -> (%.1f,%.1f,%.1f)",
                 X_arm, Y_arm, Z_arm, cx, cy, cz,
             )
-        ok = self._execute_pick(cx, cy, cz)
+        return (cx, cy, cz, source)
+
+    def _handle_pick(self, _req):
+        if self._mc is None:
+            return TriggerResponse(success=False, message="arm not connected")
+        resolved = self._resolve_pick_arm_mm()
+        if resolved is None:
+            return TriggerResponse(
+                success=False,
+                message=(
+                    "No target pose available; publish ~target_pose or "
+                    "~target_pose_override first."
+                ),
+            )
+        cx, cy, cz, source = resolved
+        ok = self._execute_pick(cx, cy, cz, use_vendor_sync=False)
         return TriggerResponse(
             success=bool(ok),
             message=(
                 f"pick ok at arm_mm=({cx:.0f},{cy:.0f},{cz:.0f}) [src={source}]"
                 if ok
                 else f"pick failed [src={source}]; see node logs"
+            ),
+        )
+
+    def _handle_pick_vendor_sync(self, _req):
+        if self._mc is None:
+            return TriggerResponse(success=False, message="arm not connected")
+        if not hasattr(self._mc, "sync_send_coords") or not callable(
+            getattr(self._mc, "sync_send_coords")
+        ):
+            return TriggerResponse(
+                success=False,
+                message=(
+                    "pymycobot sync_send_coords not available on this "
+                    "MyCobot280 binding; upgrade pymycobot for vendor sync pick."
+                ),
+            )
+        resolved = self._resolve_pick_arm_mm()
+        if resolved is None:
+            return TriggerResponse(
+                success=False,
+                message=(
+                    "No target pose available; publish ~target_pose or "
+                    "~target_pose_override first."
+                ),
+            )
+        cx, cy, cz, source = resolved
+        ok = self._execute_pick(cx, cy, cz, use_vendor_sync=True)
+        return TriggerResponse(
+            success=bool(ok),
+            message=(
+                f"pick_vendor_sync ok at arm_mm=({cx:.0f},{cy:.0f},{cz:.0f}) "
+                f"[src={source}]"
+                if ok
+                else f"pick_vendor_sync failed [src={source}]; see node logs"
             ),
         )
 
@@ -290,7 +341,56 @@ class ArmControl:
         err = math.sqrt(dx * dx + dy * dy + dz * dz)
         return (err <= self.ik_verify_tol_mm, err, got)
 
-    def _execute_pick(self, x_mm, y_mm, z_mm):
+    def _sync_send_coords(self, coords, spd, mode):
+        """Call pymycobot ``sync_send_coords`` with ``timeout`` if supported."""
+        fn = self._mc.sync_send_coords
+        kwargs = {}
+        try:
+            sig = inspect.signature(fn)
+            if "timeout" in sig.parameters:
+                kwargs["timeout"] = self.vendor_sync_timeout_s
+        except (TypeError, ValueError):
+            pass
+        try:
+            fn(coords, spd, int(mode), **kwargs)
+        except TypeError:
+            fn(coords, spd, int(mode))
+
+    def _sync_send_angles(self, angles, spd, async_sleep_s=2.0):
+        """Vendor blocking joint move, or ``send_angles`` + sleep if unavailable."""
+        if hasattr(self._mc, "sync_send_angles") and callable(
+            self._mc.sync_send_angles
+        ):
+            fn = self._mc.sync_send_angles
+            kwargs = {}
+            try:
+                sig = inspect.signature(fn)
+                if "timeout" in sig.parameters:
+                    kwargs["timeout"] = self.vendor_sync_timeout_s
+            except (TypeError, ValueError):
+                pass
+            try:
+                fn(list(angles), spd, **kwargs)
+            except TypeError:
+                fn(list(angles), spd)
+        else:
+            self._mc.send_angles(list(angles), spd)
+            time.sleep(async_sleep_s)
+
+    def _log_in_position_debug(self, data, flag_coord):
+        """Best-effort vendor ``is_in_position`` log (flag 1 = coords, 0 = angles)."""
+        fn = getattr(self._mc, "is_in_position", None)
+        if not callable(fn):
+            return
+        try:
+            ip = fn(data, flag_coord)
+            rospy.loginfo("[arm_control] is_in_position -> %s", ip)
+        except Exception as e:
+            rospy.logwarn("[arm_control] is_in_position failed: %s", e)
+
+    def _execute_pick(self, x_mm, y_mm, z_mm, use_vendor_sync=False):
+        if use_vendor_sync:
+            return self._execute_pick_vendor_sync_impl(x_mm, y_mm, z_mm)
         rx, ry, rz = self.grasp_rxryrz
         speed = self.speed
         try:
@@ -364,6 +464,78 @@ class ArmControl:
             return True
         except Exception as e:
             rospy.logerr("[arm_control] pick error: %s", e)
+            return False
+
+    def _execute_pick_vendor_sync_impl(self, x_mm, y_mm, z_mm):
+        """Pick using Elephant ``sync_send_*`` APIs; requires ``sync_send_coords``."""
+        rx, ry, rz = self.grasp_rxryrz
+        speed = self.speed
+        spd_angles = max(20, speed // 2)
+        try:
+            self._mc.set_gripper_state(0, 80)
+            self._sync_send_angles(list(self.ready_angles), spd_angles)
+            self._log_in_position_debug(list(self.ready_angles), 0)
+
+            pre = [
+                x_mm,
+                y_mm + self.pre_dy_mm,
+                z_mm + self.pre_dz_mm,
+                rx, ry, rz,
+            ]
+            self._sync_send_coords(pre, speed, int(self.approach_mode))
+            self._log_in_position_debug(pre, 1)
+
+            check = self._coords_reached(pre[:3])
+            if check is None:
+                rospy.logwarn(
+                    "[arm_control] vendor pre-grasp verify skipped (no coords read back)"
+                )
+            elif not check[0]:
+                rospy.logerr(
+                    "[arm_control] vendor pre-grasp NOT reached: want=%s got=%s err_mm=%.1f",
+                    pre[:3], list(check[2][:3]), check[1],
+                )
+                self._sync_send_angles(
+                    list(self.ready_angles), 50, async_sleep_s=1.5
+                )
+                self._sync_send_angles(
+                    list(self.home_angles), 50, async_sleep_s=1.5
+                )
+                return False
+
+            grasp = [x_mm, y_mm, z_mm, rx, ry, rz]
+            self._sync_send_coords(grasp, speed, 1)
+            self._log_in_position_debug(grasp, 1)
+
+            check = self._coords_reached(grasp[:3])
+            if check is None:
+                rospy.logwarn(
+                    "[arm_control] vendor grasp verify skipped (no coords read back)"
+                )
+            elif not check[0]:
+                rospy.logerr(
+                    "[arm_control] vendor grasp NOT reached: want=%s got=%s err_mm=%.1f",
+                    grasp[:3], list(check[2][:3]), check[1],
+                )
+                self._sync_send_angles(
+                    list(self.ready_angles), 50, async_sleep_s=1.5
+                )
+                self._sync_send_angles(
+                    list(self.home_angles), 50, async_sleep_s=1.5
+                )
+                return False
+
+            self._mc.set_gripper_state(1, 80)
+            time.sleep(1.5)
+            self._sync_send_angles(
+                list(self.ready_angles), 50, async_sleep_s=1.5
+            )
+            self._sync_send_angles(
+                list(self.home_angles), 50, async_sleep_s=1.5
+            )
+            return True
+        except Exception as e:
+            rospy.logerr("[arm_control] pick_vendor_sync error: %s", e)
             return False
 
     def _select_target_in_base(self):
