@@ -136,7 +136,8 @@ class RedCubeDetector:
             success=True,
             message=(
                 f"Last detection at ({pose.pose.position.x:.2f}, "
-                f"{pose.pose.position.y:.2f}) in {pose.header.frame_id}."
+                f"{pose.pose.position.y:.2f}, {pose.pose.position.z:.2f}) "
+                f"in {pose.header.frame_id}."
             ),
         )
 
@@ -204,7 +205,8 @@ class RedCubeDetector:
         pose.header.frame_id = self.target_frame
         pose.pose.position.x = float(p_map[0])
         pose.pose.position.y = float(p_map[1])
-        pose.pose.position.z = 0.0
+        # Publish full 3D target coordinates for downstream grasping.
+        pose.pose.position.z = float(p_map[2])
         # Orient the pose to face the robot (for downstream approach planners).
         try:
             T = self.tfbuf.lookup_transform(

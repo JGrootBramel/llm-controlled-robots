@@ -106,6 +106,9 @@ class ApproachObject:
             rospy.get_param("~precheck_plan_service", True)
         )
         self.close_in_timeout_s = float(rospy.get_param("~close_in_timeout_s", 15.0))
+        self.final_extra_forward_m = float(
+            rospy.get_param("~final_extra_forward_m", 0.05)
+        )
         self.close_in_without_standoff_enabled = bool(
             rospy.get_param("~close_in_without_standoff_enabled", True)
         )
@@ -147,23 +150,14 @@ class ApproachObject:
                 success=False, message="Failed to transform target into map frame."
             )
 
-        # Presentation mode: skip move_base standoff entirely.
-        # We directly rotate/creep toward the live target until min_standoff.
-        close_ok = self._close_in_without_standoff(target_map)
+        close_ok, end_target = self._simple_approach_to_target(target_map)
         if not close_ok:
             return TriggerResponse(
                 success=False,
-                message="Direct close-in failed or timed out.",
+                message="Simple close-in failed or timed out.",
             )
 
-        if self.close_in_enabled:
-            close_ok = self._close_in_if_needed(target_map)
-            if not close_ok:
-                return TriggerResponse(
-                    success=False, message="Close-in driving failed or timed out."
-                )
-
-        aligned = self._yaw_align(target_map)
+        aligned = self._yaw_align(end_target)
         if not aligned:
             return TriggerResponse(
                 success=False, message="Yaw align failed; check TF stream."
@@ -172,10 +166,85 @@ class ApproachObject:
         return TriggerResponse(
             success=True,
             message=(
-                f"Approached live target at ({target_map.pose.position.x:.2f}, "
-                f"{target_map.pose.position.y:.2f}) with direct close-in."
+                f"Approached target at ({end_target.pose.position.x:.2f}, "
+                f"{end_target.pose.position.y:.2f}, {end_target.pose.position.z:.2f}) "
+                f"and drove an extra {self.final_extra_forward_m:.2f} m."
             ),
         )
+
+    def _simple_approach_to_target(self, target_map):
+        """Rotate toward the latest target and drive forward until near it.
+
+        Behavior is intentionally minimal:
+        1) face target,
+        2) drive until ``min_standoff``,
+        3) creep an extra ``final_extra_forward_m`` (~5 cm by default).
+        """
+        deadline = rospy.Time.now() + rospy.Duration(self.close_in_timeout_s)
+        rate = rospy.Rate(10.0)
+        last_target = target_map
+
+        while not rospy.is_shutdown():
+            if rospy.Time.now() > deadline:
+                self.pub_cmd.publish(Twist())
+                return False, last_target
+
+            live_target = self._latest_target_in_map() or target_map
+            last_target = live_target
+            d = self._planar_distance_to(live_target)
+            if d is None:
+                rate.sleep()
+                continue
+            if d <= self.min_standoff:
+                break
+
+            if self.close_in_guard_enabled:
+                guard_ok, why = self._front_clearance_ok()
+                if not guard_ok:
+                    rospy.logwarn("[approach_object] blocked while approaching: %s", why)
+                    self.pub_cmd.publish(Twist())
+                    return False, last_target
+
+            err = self._bearing_error_to_target(live_target)
+            if err is None:
+                rate.sleep()
+                continue
+
+            tw = Twist()
+            if abs(err) > self.align_tol_rad:
+                tw.angular.z = float(
+                    self.align_angular_speed if err > 0.0 else -self.align_angular_speed
+                )
+            else:
+                tw.linear.x = float(self.close_in_speed)
+            self.pub_cmd.publish(tw)
+            rate.sleep()
+
+        self.pub_cmd.publish(Twist())
+        if self.final_extra_forward_m > 0.0:
+            if not self._drive_forward_extra(self.final_extra_forward_m):
+                return False, last_target
+        self.pub_cmd.publish(Twist())
+        return True, last_target
+
+    def _drive_forward_extra(self, distance_m):
+        speed = max(0.03, min(abs(self.close_in_speed), 0.10))
+        duration_s = float(distance_m) / speed
+        end_time = rospy.Time.now() + rospy.Duration(duration_s)
+        rate = rospy.Rate(10.0)
+        while not rospy.is_shutdown() and rospy.Time.now() < end_time:
+            if self.close_in_guard_enabled:
+                guard_ok, why = self._front_clearance_ok()
+                if not guard_ok:
+                    rospy.logwarn("[approach_object] blocked during extra forward move: %s", why)
+                    self.pub_cmd.publish(Twist())
+                    return False
+            tw = Twist()
+            tw.linear.x = speed
+            self.pub_cmd.publish(tw)
+            rate.sleep()
+        self.pub_cmd.publish(Twist())
+        return True
 
     # ---------------------------------------------------- step 1: standoff
     def _send_standoff(self, target_map):

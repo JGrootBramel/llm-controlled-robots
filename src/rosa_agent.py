@@ -247,6 +247,8 @@ def _deterministic_red_cube_flow(user_input: str):
         steps.append(f"approach: {approach_res}")
 
     if is_pick:
+        approach_res = _call_tool("approach_object")
+        steps.append(f"approach: {approach_res}")
         xyz = _extract_xyz(user_input)
         if xyz is not None:
             x_m, y_m, z_m = xyz
@@ -255,7 +257,7 @@ def _deterministic_red_cube_flow(user_input: str):
                 + _call_tool("pick_at_pose", x_m=x_m, y_m=y_m, z_m=z_m, frame_id="map")
             )
         else:
-            # Auto-use latest detector pose when user requests generic red-cube pickup.
+            # Re-read latest detector pose after approach, then pick that explicit pose.
             latest = _call_tool("get_latest_red_cube", timeout_s=1.0)
             steps.append(f"pose: {latest}")
             detected = _extract_detected_xyz(latest)

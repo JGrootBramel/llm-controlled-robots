@@ -328,7 +328,10 @@ class ArmControl:
             # Coordinate-driven flow can race: the override publisher may fire
             # just before this service runs. Wait briefly for one override pose.
             try:
-                msg = rospy.wait_for_message("~target_pose_override", PoseStamped, timeout=0.7)
+                override_topic = rospy.resolve_name("~target_pose_override")
+                msg = rospy.wait_for_message(
+                    override_topic, PoseStamped, timeout=0.7
+                )
                 with self._lock:
                     self._override_target = msg
                 resolved = self._resolve_pick_arm_mm()
@@ -369,7 +372,10 @@ class ArmControl:
         resolved = self._resolve_pick_arm_mm()
         if resolved is None:
             try:
-                msg = rospy.wait_for_message("~target_pose_override", PoseStamped, timeout=0.7)
+                override_topic = rospy.resolve_name("~target_pose_override")
+                msg = rospy.wait_for_message(
+                    override_topic, PoseStamped, timeout=0.7
+                )
                 with self._lock:
                     self._override_target = msg
                 resolved = self._resolve_pick_arm_mm()

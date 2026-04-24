@@ -106,7 +106,13 @@ def pick_at_pose(
         return "Invalid frame_id: empty string is not allowed."
 
     pub = rospy.Publisher(_TARGET_OVERRIDE_TOPIC, PoseStamped, queue_size=1, latch=True)
-    rospy.sleep(0.2)
+    deadline = rospy.Time.now() + rospy.Duration(1.0)
+    while (
+        not rospy.is_shutdown()
+        and pub.get_num_connections() == 0
+        and rospy.Time.now() < deadline
+    ):
+        rospy.sleep(0.05)
     pose = PoseStamped()
     pose.header.stamp = rospy.Time.now()
     pose.header.frame_id = frame_id
@@ -114,8 +120,9 @@ def pick_at_pose(
     pose.pose.position.y = float(y_m)
     pose.pose.position.z = float(z_m)
     pose.pose.orientation.w = 1.0
-    pub.publish(pose)
-    rospy.sleep(0.2)
+    for _ in range(3):
+        pub.publish(pose)
+        rospy.sleep(0.1)
     pick_result = _trigger(_PICK_SRV)
     return (
         f"Override pose published to {_TARGET_OVERRIDE_TOPIC} in frame "
