@@ -127,8 +127,11 @@ def get_latest_red_cube(timeout_s: float = 1.0) -> str:
         return f"No pose on {_LATEST_POSE_TOPIC} within {timeout_s:.1f} s."
     x = float(msg.pose.position.x)
     y = float(msg.pose.position.y)
+    z = float(msg.pose.position.z)
     frame = msg.header.frame_id or "?"
-    return f"Last red cube at ({x:.2f}, {y:.2f}) in '{frame}'."
+    return (
+        f"Last red cube at (x={x:.3f}, y={y:.3f}, z={z:.3f}) in '{frame}'."
+    )
 
 
 @tool

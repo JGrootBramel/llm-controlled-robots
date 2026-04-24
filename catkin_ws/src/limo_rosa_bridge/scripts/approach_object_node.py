@@ -147,37 +147,14 @@ class ApproachObject:
                 success=False, message="Failed to transform target into map frame."
             )
 
-        current_d = self._planar_distance_to(target_map)
-        standoff_pose = None
-        if current_d is not None and current_d <= self.min_standoff:
-            rospy.loginfo(
-                "[approach_object] already within min_standoff (d=%.2f <= %.2f), "
-                "skipping move_base standoff.",
-                current_d,
-                self.min_standoff,
+        # Presentation mode: skip move_base standoff entirely.
+        # We directly rotate/creep toward the live target until min_standoff.
+        close_ok = self._close_in_without_standoff(target_map)
+        if not close_ok:
+            return TriggerResponse(
+                success=False,
+                message="Direct close-in failed or timed out.",
             )
-        else:
-            ok, standoff_pose = self._send_standoff(target_map)
-            if not ok:
-                if self.close_in_without_standoff_enabled:
-                    fallback_ok = self._close_in_without_standoff(target_map)
-                    if not fallback_ok:
-                        return TriggerResponse(
-                            success=False,
-                            message=(
-                                "No reachable standoff goal found; move_base could not plan "
-                                "and close-in fallback failed."
-                            ),
-                        )
-                    rospy.logwarn(
-                        "[approach_object] move_base standoff failed; recovered with "
-                        "close-in fallback."
-                    )
-                else:
-                    return TriggerResponse(
-                        success=False,
-                        message="No reachable standoff goal found; move_base could not plan.",
-                    )
 
         if self.close_in_enabled:
             close_ok = self._close_in_if_needed(target_map)
@@ -185,8 +162,6 @@ class ApproachObject:
                 return TriggerResponse(
                     success=False, message="Close-in driving failed or timed out."
                 )
-        else:
-            rospy.loginfo("[approach_object] close-in disabled; holding standoff pose.")
 
         aligned = self._yaw_align(target_map)
         if not aligned:
@@ -197,15 +172,8 @@ class ApproachObject:
         return TriggerResponse(
             success=True,
             message=(
-                f"Approached target at ({target_map.pose.position.x:.2f}, "
-                f"{target_map.pose.position.y:.2f}) from standoff "
-                f"({standoff_pose.pose.position.x:.2f}, "
-                f"{standoff_pose.pose.position.y:.2f})."
-                if standoff_pose is not None
-                else (
-                    f"Approached target at ({target_map.pose.position.x:.2f}, "
-                    f"{target_map.pose.position.y:.2f}) without a new standoff move."
-                )
+                f"Approached live target at ({target_map.pose.position.x:.2f}, "
+                f"{target_map.pose.position.y:.2f}) with direct close-in."
             ),
         )
 
@@ -286,7 +254,8 @@ class ApproachObject:
         return False
 
     def _close_in_without_standoff(self, target_map):
-        d0 = self._planar_distance_to(target_map)
+        live_target = self._latest_target_in_map() or target_map
+        d0 = self._planar_distance_to(live_target)
         if d0 is None:
             rospy.logwarn("[approach_object] close-in fallback: no TF distance to target.")
             return False
@@ -307,7 +276,8 @@ class ApproachObject:
                 rospy.logwarn("[approach_object] close-in fallback timed out.")
                 return False
 
-            d = self._planar_distance_to(target_map)
+            live_target = self._latest_target_in_map() or target_map
+            d = self._planar_distance_to(live_target)
             if d is None:
                 rate.sleep()
                 continue
@@ -331,7 +301,7 @@ class ApproachObject:
                         d,
                     )
 
-            err = self._bearing_error_to_target(target_map)
+            err = self._bearing_error_to_target(live_target)
             if err is None:
                 rate.sleep()
                 continue
@@ -354,6 +324,13 @@ class ApproachObject:
 
         self.pub_cmd.publish(Twist())
         return False
+
+    def _latest_target_in_map(self):
+        with self._state_lock:
+            tgt = self._latest_pose
+        if tgt is None:
+            return None
+        return self._to_map_frame(tgt)
 
     # ---------------------------------------------------- step 3: yaw align
     def _yaw_align(self, target_map):

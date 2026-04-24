@@ -274,7 +274,7 @@ class ArmControl:
                 z_m,
                 z_m * 1000.0 + float(self.grasp_z_adjust_mm),
             )
-        if z_m < self.min_valid_target_z_m:
+        if source != "override" and z_m < self.min_valid_target_z_m:
             rospy.logwarn(
                 "[arm_control] replacing invalid target z=%.3f m with fallback z=%.3f m",
                 z_m,
@@ -291,26 +291,33 @@ class ArmControl:
         )
         if apply_adjust:
             Z_arm = Z_arm + float(self.grasp_z_adjust_mm)
+        if source == "override":
+            if (
+                abs(X_arm) > self.coord_lim_mm
+                or abs(Y_arm) > self.coord_lim_mm
+                or abs(Z_arm) > self.coord_lim_mm
+            ):
+                rospy.logerr(
+                    "[arm_control] override target out of arm cube: "
+                    "(%.1f, %.1f, %.1f) mm",
+                    X_arm,
+                    Y_arm,
+                    Z_arm,
+                )
+                return None
+            return (X_arm, Y_arm, Z_arm, source)
+
         limits = mch.GraspLimits(
             coord_lim_mm=self.coord_lim_mm,
             pre_dy_mm=self.pre_dy_mm,
             pre_dz_mm=self.pre_dz_mm,
         )
         cx, cy, cz, clipped = mch.clamp_grasp_coords_mm(X_arm, Y_arm, Z_arm, limits)
-        clamp_delta = math.sqrt((cx - X_arm) ** 2 + (cy - Y_arm) ** 2 + (cz - Z_arm) ** 2)
         if clipped:
             rospy.logwarn(
                 "[arm_control] grasp coords clamped: (%.1f,%.1f,%.1f) -> (%.1f,%.1f,%.1f)",
                 X_arm, Y_arm, Z_arm, cx, cy, cz,
             )
-        # Reject picks that require major clamping: they are outside reachable workspace
-        # and tend to push/sweep cubes instead of grasping.
-        if clamp_delta > 80.0:
-            rospy.logerr(
-                "[arm_control] target out of reach (clamp_delta=%.1f mm); aborting pick.",
-                clamp_delta,
-            )
-            return None
         return (cx, cy, cz, source)
 
     def _handle_pick(self, _req):
@@ -321,7 +328,7 @@ class ArmControl:
             return TriggerResponse(
                 success=False,
                 message=(
-                    "No target pose available; publish ~target_pose or "
+                    "No explicit target pose available; publish "
                     "~target_pose_override first."
                 ),
             )
@@ -354,7 +361,7 @@ class ArmControl:
             return TriggerResponse(
                 success=False,
                 message=(
-                    "No target pose available; publish ~target_pose or "
+                    "No explicit target pose available; publish "
                     "~target_pose_override first."
                 ),
             )
@@ -733,16 +740,15 @@ class ArmControl:
             return False
 
     def _select_target_in_base(self):
-        """Pick the pose to grasp at and return it in ``base_link``.
+        """Pick target in ``base_link`` from explicit override only.
 
-        Override pose wins when set and is consumed (cleared) so the next
-        pick falls back to the perception stream. Returns
-        ``(xyz_tuple_or_None, source_label)``.
+        Strict mode: we only accept caller-provided coordinates via
+        ``~target_pose_override``. This avoids accidental grabs from stale
+        detector stream poses.
         """
         with self._lock:
             override = self._override_target
             self._override_target = None
-            stream = self._latest_target
 
         if override is not None:
             xyz = self._pose_in_base(override)
@@ -754,11 +760,7 @@ class ArmControl:
                 self.base_frame,
             )
             return None, "override_tf_failed"
-
-        if stream is None:
-            return None, "none"
-        xyz = self._pose_in_base(stream)
-        return (xyz, "stream") if xyz is not None else (None, "stream")
+        return None, "override_required"
 
     def _pose_in_base(self, pose):
         if pose.header.frame_id == self.base_frame:

@@ -183,6 +183,17 @@ def _extract_xyz(text: str):
     return float(x.group(1)), float(y.group(1)), float(z.group(1))
 
 
+def _extract_detected_xyz(text: str):
+    m = re.search(
+        r"x\s*=\s*(-?\d+(?:\.\d+)?)\s*,\s*y\s*=\s*(-?\d+(?:\.\d+)?)\s*,\s*z\s*=\s*(-?\d+(?:\.\d+)?)",
+        text,
+        re.IGNORECASE,
+    )
+    if not m:
+        return None
+    return float(m.group(1)), float(m.group(2)), float(m.group(3))
+
+
 def _deterministic_red_cube_flow(user_input: str):
     txt = user_input.lower()
     is_scan = "scan" in txt and "red cube" in txt
@@ -190,6 +201,11 @@ def _deterministic_red_cube_flow(user_input: str):
     is_pick = (
         (("pick" in txt) or ("grab" in txt))
         and "red cube" in txt
+    )
+    is_continuous_scan_grab = (
+        ("scan" in txt and ("continuous" in txt or "continuously" in txt))
+        and ("grab" in txt or "pick" in txt)
+        and "cube" in txt
     )
     is_drop = (
         ("drop" in txt or "place" in txt)
@@ -199,12 +215,34 @@ def _deterministic_red_cube_flow(user_input: str):
         return None
 
     steps = []
+    if is_continuous_scan_grab:
+        steps.append(f"detector: {_call_tool('enable_red_cube_detector', enabled=True)}")
+        max_attempts = 5
+        for i in range(max_attempts):
+            found = _call_tool("is_red_cube_found", timeout_s=1.0)
+            steps.append(f"scan[{i+1}]: {found}")
+            if "found=True" not in found:
+                continue
+            snap = _call_tool("snapshot_red_cube")
+            steps.append(f"snapshot[{i+1}]: {snap}")
+            latest = _call_tool("get_latest_red_cube", timeout_s=1.0)
+            steps.append(f"pose[{i+1}]: {latest}")
+            xyz = _extract_detected_xyz(latest)
+            if xyz is None:
+                continue
+            x_m, y_m, z_m = xyz
+            pick_res = _call_tool("pick_at_pose", x_m=x_m, y_m=y_m, z_m=z_m, frame_id="map")
+            steps.append(f"pick[{i+1}]: {pick_res}")
+            if "Pick result: OK:" in pick_res:
+                break
+        return "\n".join(steps)
+
     steps.append(f"snapshot: {_call_tool('snapshot_red_cube')}")
 
     if is_scan and not (is_approach or is_pick):
         return "\n".join(steps)
 
-    if is_approach or is_pick:
+    if is_approach:
         approach_res = _call_tool("approach_object")
         steps.append(f"approach: {approach_res}")
 
@@ -217,15 +255,10 @@ def _deterministic_red_cube_flow(user_input: str):
                 + _call_tool("pick_at_pose", x_m=x_m, y_m=y_m, z_m=z_m, frame_id="map")
             )
         else:
-            if "approach_res" in locals() and not str(approach_res).startswith("OK"):
-                steps.append("pick: SKIPPED because approach failed (out of arm reach).")
-                return "\n".join(steps)
-            pick_res = _call_tool("pick_object")
-            steps.append(f"pick: {pick_res}")
-            if not pick_res.startswith("OK"):
-                steps.append(
-                    f"pick_vendor_sync: {_call_tool('pick_object_vendor_sync')}"
-                )
+            steps.append(
+                "pick_at_pose: FAIL: explicit coordinates required "
+                "(use x=..., y=..., z=...)."
+            )
     if is_drop:
         xyz = _extract_xyz(user_input)
         if xyz is None:
