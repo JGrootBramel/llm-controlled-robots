@@ -480,7 +480,7 @@ def explore_and_fetch_all_cubes(
     home_y: float,
     home_yaw_deg: float,
     exploration_duration_s: float = 30.0,
-    deduplication_radius_m: float = 0.10,
+    deduplication_radius_m: float = 0.15,
     max_cubes: int = 20,
 ) -> str:
     """
@@ -500,7 +500,7 @@ def explore_and_fetch_all_cubes(
         home_y: The Y coordinate of the home/delivery location in the map frame.
         home_yaw_deg: The final orientation of the robot at the home location in degrees.
         exploration_duration_s: How long to explore for cubes in seconds.
-        deduplication_radius_m: The distance to consider two cubes the same (minimum 0.10 m).
+        deduplication_radius_m: The distance to consider two cubes the same (minimum 0.15 m).
     """
     ensure_rospy()
     log = []
@@ -511,7 +511,7 @@ def explore_and_fetch_all_cubes(
 
     def cube_callback(msg: PoseStamped):
         # Check for duplicates
-        dedup_radius = max(0.10, float(deduplication_radius_m))
+        dedup_radius = max(0.15, float(deduplication_radius_m))
         for existing_pose in found_cubes_poses:
             dist = math.sqrt(
                 (msg.pose.position.x - existing_pose.pose.position.x) ** 2
@@ -559,11 +559,18 @@ def explore_and_fetch_all_cubes(
 
     # --- 2. Fetch and Deliver Phase ---
     delivered_count = 0
+    processed_count = 0
     target_pub = rospy.Publisher("/red_cubes/latest_pose", PoseStamped, queue_size=1, latch=True)
     rospy.sleep(0.2)
-    for i, cube_pose in enumerate(found_cubes_poses):
+    pending_cubes = list(found_cubes_poses)
+    cluster_radius_m = max(0.15, float(deduplication_radius_m))
+    i = 0
+    while pending_cubes:
+        cube_pose = pending_cubes.pop(0)
+        i += 1
+        processed_count += 1
         log.append(
-            f"--- Processing cube #{i+1}/{len(found_cubes_poses)} at "
+            f"--- Processing cube #{i}/{len(found_cubes_poses)} at "
             f"(x={cube_pose.pose.position.x:.2f}, y={cube_pose.pose.position.y:.2f}, "
             f"z={cube_pose.pose.position.z:.2f}) ---"
         )
@@ -582,9 +589,6 @@ def explore_and_fetch_all_cubes(
 
         approach_result = _trigger("/approach_object/approach")
         log.append(f"Approach: {approach_result}")
-        if "FAIL" in approach_result:
-            log.append("Skipping this cube because approach failed.")
-            continue
 
         # 3. Attempt to pick the object at its exact stored 3D pose.
         pub = rospy.Publisher("/arm_control/target_pose_override", PoseStamped, queue_size=1, latch=True)
@@ -606,6 +610,21 @@ def explore_and_fetch_all_cubes(
         pick_result = _trigger("/arm_control/pick")
         log.append(f"Pick attempt: {pick_result}")
 
+        # Remove this cube and any nearby duplicates so we don't retry the same object.
+        before = len(pending_cubes)
+        cx = float(cube_pose.pose.position.x)
+        cy = float(cube_pose.pose.position.y)
+        filtered = []
+        for p in pending_cubes:
+            d = math.hypot(float(p.pose.position.x) - cx, float(p.pose.position.y) - cy)
+            if d > cluster_radius_m:
+                filtered.append(p)
+        removed = before - len(filtered)
+        pending_cubes = filtered
+        log.append(
+            f"Cluster cleanup: removed {removed} nearby queued cube(s) within {cluster_radius_m:.2f} m."
+        )
+
         # 4. Drive to home location and 5. Place.
         # Continue to the next cube even when pick/place fails.
         nav_home_result = _go_to_map_pose(home_x, home_y, home_yaw_deg)
@@ -618,5 +637,8 @@ def explore_and_fetch_all_cubes(
         else:
             log.append("Pick failed; continuing to next cube as requested.")
 
-    header = f"Mission complete. Found {len(found_cubes_poses)} cubes. Successfully placed {delivered_count}."
+    header = (
+        f"Mission complete. Found {len(found_cubes_poses)} cubes, processed {processed_count}. "
+        f"Successfully placed {delivered_count}."
+    )
     return header + "\n" + "\n".join(log)
