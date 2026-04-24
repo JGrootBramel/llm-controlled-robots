@@ -145,17 +145,26 @@ def install() -> None:
             self.z = z
             self.w = w
 
+    class Pose:
+        def __init__(self) -> None:
+            self.position = SimpleNamespace(x=0.0, y=0.0, z=0.0)
+            self.orientation = Quaternion()
+
+    class PointStamped:
+        def __init__(self) -> None:
+            self.header = SimpleNamespace(stamp=None, frame_id="")
+            self.point = SimpleNamespace(x=0.0, y=0.0, z=0.0)
+
     class PoseStamped:
         def __init__(self) -> None:
             self.header = SimpleNamespace(stamp=None, frame_id="")
-            self.pose = SimpleNamespace(
-                position=SimpleNamespace(x=0.0, y=0.0, z=0.0),
-                orientation=Quaternion(),
-            )
+            self.pose = Pose()
 
     geom = types.ModuleType("geometry_msgs.msg")
     geom.Twist = Twist
     geom.Quaternion = Quaternion
+    geom.Pose = Pose
+    geom.PointStamped = PointStamped
     geom.PoseStamped = PoseStamped
     sys.modules["geometry_msgs"] = types.ModuleType("geometry_msgs")
     sys.modules["geometry_msgs.msg"] = geom
@@ -262,8 +271,16 @@ def install() -> None:
         z = cr * cp * sy - sr * sp * cy
         return (x, y, z, w)
 
+    def euler_from_quaternion(q: tuple) -> tuple:
+        x, y, z, w = q
+        t0 = +2.0 * (w * z + x * y)
+        t1 = +1.0 - 2.0 * (y * y + z * z)
+        yaw = math.atan2(t0, t1)
+        return (0.0, 0.0, yaw)
+
     tf_trans = types.ModuleType("tf.transformations")
     tf_trans.quaternion_from_euler = quaternion_from_euler
+    tf_trans.euler_from_quaternion = euler_from_quaternion
     sys.modules["tf"] = types.ModuleType("tf")
     sys.modules["tf.transformations"] = tf_trans
 
@@ -295,5 +312,43 @@ def install() -> None:
     tf2_ros.ConnectivityException = ConnectivityException
     tf2_ros.ExtrapolationException = ExtrapolationException
     sys.modules["tf2_ros"] = tf2_ros
+
+    # --- actionlib + move_base_msgs.msg ---
+    class SimpleActionClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def wait_for_server(self, *args: Any, **kwargs: Any) -> bool:
+            return True
+
+        def send_goal(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def wait_for_result(self, *args: Any, **kwargs: Any) -> bool:
+            return True
+
+        def get_state(self) -> int:
+            return 3
+
+        def cancel_goal(self) -> None:
+            pass
+
+    actionlib_mod = types.ModuleType("actionlib")
+    actionlib_mod.SimpleActionClient = SimpleActionClient
+    actionlib_mod.GoalStatus = SimpleNamespace(SUCCEEDED=3)
+    sys.modules["actionlib"] = actionlib_mod
+
+    class MoveBaseAction:
+        pass
+
+    class MoveBaseGoal:
+        def __init__(self) -> None:
+            self.target_pose = PoseStamped()
+
+    move_base_msgs = types.ModuleType("move_base_msgs.msg")
+    move_base_msgs.MoveBaseAction = MoveBaseAction
+    move_base_msgs.MoveBaseGoal = MoveBaseGoal
+    sys.modules["move_base_msgs"] = types.ModuleType("move_base_msgs")
+    sys.modules["move_base_msgs.msg"] = move_base_msgs
 
     _INSTALLED = True

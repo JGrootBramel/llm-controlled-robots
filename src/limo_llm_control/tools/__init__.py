@@ -30,11 +30,17 @@ from .manipulation import (
     pick_object_vendor_sync,
     place_object,
 )
-from .mission import explore_and_fetch_all_cubes, fetch_red_cubes, process_clicked_points
+from .mission import (
+    explore_and_fetch_all_cubes,
+    fetch_red_cubes,
+    fetch_red_cubes_to_start,
+    process_clicked_points,
+)
 from .motion import drive_distance, turn_in_place
 from .navigation import (
     build_and_save_map,
     cancel_navigation,
+    get_current_map_pose,
     go_to_map_pose,
     reset_cam_coverage,
     reset_exploration,
@@ -58,6 +64,7 @@ __all__ = [
     "reset_exploration",
     "reset_cam_coverage",
     "go_to_map_pose",
+    "get_current_map_pose",
     "cancel_navigation",
     "build_and_save_map",
     # perception
@@ -75,6 +82,7 @@ __all__ = [
     "arm_go_home",
     # mission
     "fetch_red_cubes",
+    "fetch_red_cubes_to_start",
     "explore_and_fetch_all_cubes",
     "process_clicked_points",
     # diagnostics

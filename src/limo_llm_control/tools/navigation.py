@@ -11,11 +11,12 @@ import math
 import time
 
 import rospy
+import tf2_ros
 from actionlib_msgs.msg import GoalID
 from geometry_msgs.msg import PoseStamped, Twist
 from langchain.tools import tool
 from std_srvs.srv import Empty, SetBool, Trigger
-from tf.transformations import quaternion_from_euler
+from tf.transformations import euler_from_quaternion, quaternion_from_euler
 
 from ..ros_clients import ensure_rospy
 
@@ -150,6 +151,41 @@ def go_to_map_pose(
     return (
         f"Published goal to {goal_topic} in frame '{frame_id}' at "
         f"(x={x_m:.2f}, y={y_m:.2f}, yaw={yaw_deg:.1f}°)."
+    )
+
+
+@tool
+def get_current_map_pose(
+    map_frame: str = "map",
+    base_frame: str = "base_link",
+    tf_timeout_s: float = 0.5,
+) -> str:
+    """Return the robot's current map-frame pose for mission home calibration."""
+    ensure_rospy()
+    tfbuf = tf2_ros.Buffer()
+    tf2_ros.TransformListener(tfbuf)
+    try:
+        t = tfbuf.lookup_transform(
+            str(map_frame),
+            str(base_frame),
+            rospy.Time(0),
+            rospy.Duration(max(0.05, float(tf_timeout_s))),
+        )
+    except Exception as exc:
+        return (
+            f"FAIL: Could not lookup transform {map_frame}->{base_frame}: {exc}. "
+            "Make sure localization and TF are running."
+        )
+
+    q = t.transform.rotation
+    _, _, yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])
+    yaw_deg = math.degrees(yaw)
+    return (
+        f"Current pose in '{map_frame}': "
+        f"x={t.transform.translation.x:.3f}, "
+        f"y={t.transform.translation.y:.3f}, "
+        f"yaw_deg={yaw_deg:.1f}. "
+        "Use these as delivery_x, delivery_y, delivery_yaw_deg."
     )
 
 

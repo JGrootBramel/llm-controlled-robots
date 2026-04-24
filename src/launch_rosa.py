@@ -66,6 +66,7 @@ _REFACTORED_TOOLS = [
     stop_exploration,
     reset_exploration,
     reset_cam_coverage,
+    get_current_map_pose,
     go_to_map_pose,
     cancel_navigation,
     enable_red_cube_detector,
@@ -78,6 +79,7 @@ _REFACTORED_TOOLS = [
     place_object,
     arm_go_home,
     fetch_red_cubes,
+    fetch_red_cubes_to_start,
     halt_robot,
     get_autonomy_status,
 ]

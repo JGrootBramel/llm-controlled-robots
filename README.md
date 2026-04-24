@@ -97,8 +97,13 @@ single ROSA call (see
 [docs/rosa/mission-fetch-red-cubes.md](docs/rosa/mission-fetch-red-cubes.md)):
 
 ```python
-from limo_llm_control.tools import fetch_red_cubes
-fetch_red_cubes(delivery_x=1.0, delivery_y=0.0, delivery_yaw_deg=0.0)
+from limo_llm_control.tools import fetch_red_cubes, fetch_red_cubes_to_start
+
+# Explicit home pose (map frame), starting with two cubes.
+fetch_red_cubes(delivery_x=1.0, delivery_y=0.0, delivery_yaw_deg=0.0, max_cubes=2)
+
+# Or lock the robot's current map pose as "start/home" and run.
+fetch_red_cubes_to_start(max_cubes=2)
 ```
 
 Per-node topics and services are documented in

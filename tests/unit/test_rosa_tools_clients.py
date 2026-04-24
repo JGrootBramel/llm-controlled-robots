@@ -159,11 +159,14 @@ def test_manipulation_tool_hits_expected_service(
 # -------------------------------------------------------------------- mission
 
 
+@patch("actionlib.SimpleActionClient")
 @patch("limo_llm_control.tools.mission.rospy")
-def test_fetch_red_cubes_happy_path_sequence(mock_rospy):
-    """When /red_cubes/found reports True immediately, mission runs all steps."""
+def test_fetch_red_cubes_happy_path_sequence(mock_rospy, mock_sac_cls):
+    """When /red_cubes/latest_pose is available, mission runs all steps."""
     mock_rospy.wait_for_service = MagicMock()
     mock_rospy.sleep = MagicMock()
+    mock_rospy.is_shutdown = MagicMock(return_value=False)
+    mock_rospy.Duration = MagicMock(side_effect=lambda s: s)
     mock_rospy.Time = SimpleNamespace(now=MagicMock(return_value=0.0))
     mock_rospy.Publisher = MagicMock(return_value=MagicMock())
 
@@ -173,8 +176,16 @@ def test_fetch_red_cubes_happy_path_sequence(mock_rospy):
 
     mock_rospy.ServiceProxy = MagicMock(side_effect=_svc_ctor)
 
-    # /red_cubes/found -> True on the first poll.
-    mock_rospy.wait_for_message = MagicMock(return_value=SimpleNamespace(data=True))
+    pose_msg = SimpleNamespace(
+        pose=SimpleNamespace(position=SimpleNamespace(x=1.0, y=0.5, z=0.0))
+    )
+    mock_rospy.wait_for_message = MagicMock(return_value=pose_msg)
+
+    mock_client = MagicMock()
+    mock_client.wait_for_server.return_value = True
+    mock_client.wait_for_result.return_value = True
+    mock_client.get_state.return_value = 3  # GoalStatus.SUCCEEDED
+    mock_sac_cls.return_value = mock_client
 
     fn = mission.fetch_red_cubes.func if hasattr(mission.fetch_red_cubes, "func") else mission.fetch_red_cubes
     out = fn(delivery_x=1.0, delivery_y=2.0, delivery_yaw_deg=0.0, max_cubes=1,
@@ -192,13 +203,14 @@ def test_fetch_red_cubes_happy_path_sequence(mock_rospy):
     ):
         assert expected in called_services, f"missing {expected} in {called_services}"
 
-    assert "delivered 1/1" in out
+    assert "delivered 1/1" in out and "processed=1" in out
 
 
 @patch("limo_llm_control.tools.mission.rospy")
 def test_fetch_red_cubes_timeout_bails(mock_rospy):
     mock_rospy.wait_for_service = MagicMock()
     mock_rospy.sleep = MagicMock()
+    mock_rospy.is_shutdown = MagicMock(return_value=False)
     mock_rospy.Time = SimpleNamespace(now=MagicMock(return_value=0.0))
     mock_rospy.Publisher = MagicMock(return_value=MagicMock())
 
@@ -215,4 +227,4 @@ def test_fetch_red_cubes_timeout_bails(mock_rospy):
     # Approach/pick/place never happen on timeout.
     assert "/approach_object/approach" not in called_services
     assert "/arm_control/pick" not in called_services
-    assert "delivered 0/1" in out
+    assert "delivered 0/1" in out and "processed=0" in out

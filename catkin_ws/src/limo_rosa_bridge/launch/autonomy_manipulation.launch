@@ -7,8 +7,8 @@
        Going much above 0.33 will clamp the grasp inside the safe cube and
        the gripper will stop short of the target. Raise ``coord_lim_mm``
        (default 300 mm below) alongside if you push this further. -->
-  <arg name="standoff" default="0.33" />
-  <arg name="min_standoff" default="0.25" />
+  <arg name="standoff" default="0.20" />
+  <arg name="min_standoff" default="0.15" />
   <!-- Smarter close-in: enabled by default, but guarded by front lidar so the
        base stops if something (e.g., the support box) is in front. -->
   <arg name="close_in_enabled" default="true" />
@@ -16,7 +16,7 @@
   <arg name="close_in_guard_enabled" default="true" />
   <!-- Lowered from 0.35 -> 0.30 so guarded close-in can finish the last ~5 cm
        when the support box is detected but still not in contact range. -->
-  <arg name="close_in_guard_distance_m" default="0.30" />
+  <arg name="close_in_guard_distance_m" default="0.20" />
   <arg name="close_in_guard_half_angle_deg" default="18.0" />
   <arg name="close_in_guard_min_valid_beams" default="3" />
   <arg name="close_in_guard_scan_stale_s" default="0.5" />
@@ -42,6 +42,14 @@
        1 = linear Cartesian (straight-line but only safe once the ready
        pose has pre-oriented the wrist). -->
   <arg name="approach_mode" default="0" />
+  <arg name="place_speed" default="40" />
+  <arg name="place_gripper_open" default="80" />
+  <!-- Optional explicit joint targets for drop/home tuning at the mission
+       start pose. Keep six values each (J1..J6). Disabled by default so the
+       arm node keeps using mount-aware helper defaults. -->
+  <arg name="use_custom_arm_angles" default="false" />
+  <arg name="place_angles" default="[-90,-25,-70,7,0,-45]" />
+  <arg name="home_angles" default="[-90,0,0,0,0,0]" />
   <!-- Added to arm-frame Z (mm) after map/base_link -> arm mapping. Use when
        /red_cubes/latest_pose has wrong z (e.g. always 0 in map). Typical
        table-top: try 100–200 and tune from grasp logs / reach. -->
@@ -74,6 +82,10 @@
     <param name="approach_mode" value="$(arg approach_mode)" />
     <param name="coord_limit_mm" value="$(arg coord_limit_mm)" />
     <param name="grasp_z_adjust_mm" value="$(arg grasp_z_adjust_mm)" />
+    <param name="place_speed" value="$(arg place_speed)" />
+    <param name="place_gripper_open" value="$(arg place_gripper_open)" />
+    <rosparam if="$(arg use_custom_arm_angles)" param="place_angles" subst_value="true">$(arg place_angles)</rosparam>
+    <rosparam if="$(arg use_custom_arm_angles)" param="home_angles" subst_value="true">$(arg home_angles)</rosparam>
     <rosparam param="ready_point_base_xyz_m" subst_value="true">[$(arg ready_point_base_x_m), $(arg ready_point_base_y_m), $(arg ready_point_base_z_m)]</rosparam>
     <!-- Wire the detector's latched pose straight into the arm node. -->
     <remap from="~target_pose" to="$(arg target_pose_topic)" />

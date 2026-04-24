@@ -15,15 +15,15 @@ import json
 import math
 import time
 import queue
+from typing import Iterable, Optional, Tuple
 
-import actionlib
 import rospy
+import tf2_ros
 from geometry_msgs.msg import PointStamped, Pose, PoseStamped
 from langchain.tools import tool
-from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from std_msgs.msg import Bool
 from std_srvs.srv import SetBool, Trigger
-from tf.transformations import quaternion_from_euler
+from tf.transformations import euler_from_quaternion, quaternion_from_euler
 
 from ..ros_clients import ensure_rospy
 
@@ -89,6 +89,9 @@ def _set_bool_with_retry(
 
 def _go_to_map_pose(x: float, y: float, yaw_deg: float) -> str:
     """Navigates the robot to a map pose and waits for completion."""
+    import actionlib
+    from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+
     ensure_rospy()
     client = actionlib.SimpleActionClient("move_base", MoveBaseAction)
     if not client.wait_for_server(rospy.Duration(5.0)):
@@ -153,6 +156,43 @@ def _wait_for_found(timeout_s: float) -> bool:
         if bool(msg.data):
             return True
     return False
+
+
+def _is_ok(result: str) -> bool:
+    return str(result).startswith("OK:")
+
+
+def _xy_distance(a: Tuple[float, float], b: Tuple[float, float]) -> float:
+    return math.hypot(float(a[0]) - float(b[0]), float(a[1]) - float(b[1]))
+
+
+def _extract_latest_cube_xy(timeout_s: float = 0.5) -> Optional[Tuple[float, float]]:
+    """Read the latest detector pose and return map XY, if available."""
+    ensure_rospy()
+    try:
+        msg = rospy.wait_for_message("/red_cubes/latest_pose", PoseStamped, timeout=float(timeout_s))
+    except Exception:
+        return None
+    return (float(msg.pose.position.x), float(msg.pose.position.y))
+
+
+def _wait_for_unique_cube(
+    detection_timeout_s: float,
+    known_cubes_xy: Iterable[Tuple[float, float]],
+    dedup_radius_m: float,
+) -> Optional[Tuple[float, float]]:
+    """Wait for a red-cube pose that is not near already processed cubes."""
+    ensure_rospy()
+    deadline = time.time() + float(detection_timeout_s)
+    known = list(known_cubes_xy)
+    while time.time() < deadline and not rospy.is_shutdown():
+        remaining = max(0.05, min(1.0, deadline - time.time()))
+        xy = _extract_latest_cube_xy(timeout_s=remaining)
+        if xy is None:
+            continue
+        if all(_xy_distance(xy, k) > float(dedup_radius_m) for k in known):
+            return xy
+    return None
 
 
 @tool
@@ -220,8 +260,10 @@ def fetch_red_cubes(
     delivery_x: float = 0.0,
     delivery_y: float = 0.0,
     delivery_yaw_deg: float = 0.0,
-    max_cubes: int = 1,
+    max_cubes: int = 2,
     detection_timeout_s: float = 90.0,
+    dedup_radius_m: float = 0.10,
+    stop_after_no_new_cubes: bool = True,
 ) -> str:
     """Full mission: explore, find red cubes, pick, deliver, place.
 
@@ -241,29 +283,115 @@ def fetch_red_cubes(
         delivery_yaw_deg: Final orientation at drop-off (deg).
         max_cubes: Cap on how many cubes to fetch in this mission.
         detection_timeout_s: How long to explore before giving up per cube.
+        dedup_radius_m: Ignore detections near already processed cubes.
+        stop_after_no_new_cubes: Stop early if no unique cube appears.
     """
     ensure_rospy()
     log = [_set_bool_with_retry("/red_cube_detector/enable", True)]
     delivered = 0
+    processed = 0
+    seen_cubes_xy: list[Tuple[float, float]] = []
 
     for i in range(int(max_cubes)):
         log.append(_set_bool_with_retry("/exploration_enabled", True))
-        found = _wait_for_found(detection_timeout_s)
+        candidate_xy = _wait_for_unique_cube(
+            detection_timeout_s=detection_timeout_s,
+            known_cubes_xy=seen_cubes_xy,
+            dedup_radius_m=dedup_radius_m,
+        )
         log.append(_set_bool_with_retry("/exploration_enabled", False))
-        if not found:
-            log.append(f"FAIL: cube #{i + 1} not found within {detection_timeout_s}s")
-            break
+        if candidate_xy is None:
+            log.append(f"FAIL: no new cube found within {detection_timeout_s}s")
+            if stop_after_no_new_cubes:
+                break
+            continue
 
-        log.append(_trigger("/red_cube_detector/snapshot"))
-        log.append(_trigger("/approach_object/approach"))
-        log.append(_trigger("/arm_control/pick"))
-        log.append(_go_to_map_pose(delivery_x, delivery_y, delivery_yaw_deg))
+        seen_cubes_xy.append(candidate_xy)
+        processed += 1
+
+        snapshot = _trigger("/red_cube_detector/snapshot")
+        log.append(snapshot)
+        if not _is_ok(snapshot):
+            log.append("Skipping cube because snapshot failed.")
+            continue
+
+        approach = _trigger("/approach_object/approach")
+        log.append(approach)
+        if not _is_ok(approach):
+            log.append("Skipping cube because approach failed.")
+            continue
+
+        pick = _trigger("/arm_control/pick")
+        log.append(pick)
+        if not _is_ok(pick):
+            log.append("Skipping delivery because pick failed.")
+            continue
+
+        nav_home = _go_to_map_pose(delivery_x, delivery_y, delivery_yaw_deg)
+        log.append(nav_home)
+        if not _is_ok(nav_home):
+            log.append("Skipping place because navigation to home failed.")
+            continue
+
         rospy.sleep(1.0)
-        log.append(_trigger("/arm_control/place"))
-        delivered += 1
+        place = _trigger("/arm_control/place")
+        log.append(place)
+        if _is_ok(place):
+            delivered += 1
 
-    header = f"fetch_red_cubes: delivered {delivered}/{max_cubes}"
+    header = f"fetch_red_cubes: delivered {delivered}/{max_cubes}, processed={processed}"
     return header + "\n" + "\n".join(log)
+
+
+@tool
+def fetch_red_cubes_to_start(
+    max_cubes: int = 2,
+    detection_timeout_s: float = 90.0,
+    dedup_radius_m: float = 0.10,
+    map_frame: str = "map",
+    base_frame: str = "base_link",
+) -> str:
+    """Capture current map pose as home and fetch red cubes back to that pose."""
+    ensure_rospy()
+    tfbuf = tf2_ros.Buffer()
+    tf2_ros.TransformListener(tfbuf)
+    try:
+        t = tfbuf.lookup_transform(
+            str(map_frame),
+            str(base_frame),
+            rospy.Time(0),
+            rospy.Duration(0.5),
+        )
+    except Exception as exc:
+        return (
+            f"FAIL: Could not read current pose in '{map_frame}' from '{base_frame}': {exc}"
+        )
+
+    q = t.transform.rotation
+    _, _, yaw = euler_from_quaternion([q.x, q.y, q.z, q.w])
+    yaw_deg = math.degrees(yaw)
+    x = float(t.transform.translation.x)
+    y = float(t.transform.translation.y)
+    prefix = (
+        f"Home pose locked at x={x:.3f}, y={y:.3f}, yaw_deg={yaw_deg:.1f}. "
+        f"Running mission with max_cubes={int(max_cubes)}."
+    )
+    result = fetch_red_cubes.func(  # type: ignore[attr-defined]
+        delivery_x=x,
+        delivery_y=y,
+        delivery_yaw_deg=yaw_deg,
+        max_cubes=int(max_cubes),
+        detection_timeout_s=float(detection_timeout_s),
+        dedup_radius_m=float(dedup_radius_m),
+    ) if hasattr(fetch_red_cubes, "func") else fetch_red_cubes(
+        delivery_x=x,
+        delivery_y=y,
+        delivery_yaw_deg=yaw_deg,
+        max_cubes=int(max_cubes),
+        detection_timeout_s=float(detection_timeout_s),
+        dedup_radius_m=float(dedup_radius_m),
+    )
+    return prefix + "\n" + result
 
 
 @tool
