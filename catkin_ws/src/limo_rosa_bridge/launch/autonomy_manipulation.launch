@@ -16,7 +16,7 @@
   <arg name="close_in_guard_enabled" default="true" />
   <!-- Lowered from 0.35 -> 0.30 so guarded close-in can finish the last ~5 cm
        when the support box is detected but still not in contact range. -->
-  <arg name="close_in_guard_distance_m" default="0.20" />
+  <arg name="close_in_guard_distance_m" default="0.16" />
   <arg name="close_in_guard_half_angle_deg" default="18.0" />
   <arg name="close_in_guard_min_valid_beams" default="3" />
   <arg name="close_in_guard_scan_stale_s" default="0.5" />
@@ -61,6 +61,9 @@
        /red_cubes/latest_pose has wrong z (e.g. always 0 in map). Typical
        table-top: try 100–200 and tune from grasp logs / reach. -->
   <arg name="grasp_z_adjust_mm" default="140.0" />
+  <arg name="min_valid_target_z_m" default="0.03" />
+  <arg name="fallback_target_z_m" default="0.08" />
+  <arg name="simple_pick_enabled" default="true" />
   <arg name="target_pose_topic" default="/red_cubes/latest_pose" />
   <!-- One-shot override topic the LLM tools publish to (pick_at_pose etc.).
        Defaults to the arm node's private topic so it works without a remap. -->
@@ -94,6 +97,9 @@
     <param name="approach_mode" value="$(arg approach_mode)" />
     <param name="coord_limit_mm" value="$(arg coord_limit_mm)" />
     <param name="grasp_z_adjust_mm" value="$(arg grasp_z_adjust_mm)" />
+    <param name="min_valid_target_z_m" value="$(arg min_valid_target_z_m)" />
+    <param name="fallback_target_z_m" value="$(arg fallback_target_z_m)" />
+    <param name="simple_pick_enabled" value="$(arg simple_pick_enabled)" />
     <param name="place_speed" value="$(arg place_speed)" />
     <param name="place_gripper_open" value="$(arg place_gripper_open)" />
     <rosparam if="$(arg use_custom_arm_angles)" param="place_angles" subst_value="true">$(arg place_angles)</rosparam>

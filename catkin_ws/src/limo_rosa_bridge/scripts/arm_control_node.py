@@ -113,11 +113,20 @@ class ArmControl:
         self.grasp_z_adjust_mm = float(
             rospy.get_param("~grasp_z_adjust_mm", 140.0)
         )
+        self.min_valid_target_z_m = float(
+            rospy.get_param("~min_valid_target_z_m", 0.03)
+        )
+        self.fallback_target_z_m = float(
+            rospy.get_param("~fallback_target_z_m", 0.08)
+        )
         self.grasp_z_adjust_only_below_m = float(
             rospy.get_param("~grasp_z_adjust_only_below_m", 0.08)
         )
         self.apply_z_adjust_to_override = bool(
             rospy.get_param("~apply_z_adjust_to_override", False)
+        )
+        self.simple_pick_enabled = bool(
+            rospy.get_param("~simple_pick_enabled", True)
         )
         self.ik_verify_tol_mm = float(
             rospy.get_param("~ik_verify_tol_mm", 15.0)
@@ -265,6 +274,13 @@ class ArmControl:
                 z_m,
                 z_m * 1000.0 + float(self.grasp_z_adjust_mm),
             )
+        if z_m < self.min_valid_target_z_m:
+            rospy.logwarn(
+                "[arm_control] replacing invalid target z=%.3f m with fallback z=%.3f m",
+                z_m,
+                self.fallback_target_z_m,
+            )
+            z_m = float(self.fallback_target_z_m)
         X_arm, Y_arm, Z_arm = mch.base_to_arm_mm(
             x_m, y_m, z_m, mount_yaw_deg=self.mount_yaw_deg
         )
@@ -478,6 +494,8 @@ class ArmControl:
     def _execute_pick(self, x_mm, y_mm, z_mm, use_vendor_sync=False):
         if use_vendor_sync:
             return self._execute_pick_vendor_sync_impl(x_mm, y_mm, z_mm)
+        if self.simple_pick_enabled:
+            return self._execute_pick_simple(x_mm, y_mm, z_mm)
         rx, ry, rz = self.grasp_rxryrz
         speed = self.speed
         try:
@@ -556,6 +574,42 @@ class ArmControl:
             return True
         except Exception as e:
             rospy.logerr("[arm_control] pick error: %s", e)
+            return False
+
+    def _execute_pick_simple(self, x_mm, y_mm, z_mm):
+        """Presentation-safe pick: go target -> close -> return home."""
+        rx, ry, rz = self.grasp_rxryrz
+        speed = self.speed
+        try:
+            self._mc.set_gripper_state(0, 100)
+            time.sleep(0.6)
+            self._mc.send_angles(list(self.ready_angles), max(20, speed // 2))
+            time.sleep(2.0)
+            grasp = [x_mm, y_mm, z_mm, rx, ry, rz]
+            # Linear Cartesian move to the exact target point.
+            self._mc.send_coords(grasp, speed, 1)
+            time.sleep(2.2)
+            check = self._coords_reached(grasp[:3])
+            if check is not None and not check[0]:
+                rospy.logerr(
+                    "[arm_control] simple grasp NOT reached: want=%s got=%s err_mm=%.1f",
+                    grasp[:3], list(check[2][:3]), check[1],
+                )
+                self._mc.send_angles(list(self.home_angles), 50)
+                time.sleep(1.5)
+                return False
+            if not self._close_gripper_strong():
+                rospy.logerr("[arm_control] gripper failed to close at simple grasp pose")
+                self._mc.send_angles(list(self.home_angles), 50)
+                time.sleep(1.5)
+                return False
+            self._mc.send_angles(list(self.ready_angles), 50)
+            time.sleep(1.5)
+            self._mc.send_angles(list(self.home_angles), 50)
+            time.sleep(1.5)
+            return True
+        except Exception as e:
+            rospy.logerr("[arm_control] simple pick error: %s", e)
             return False
 
     def _execute_place_at(self, x_mm, y_mm, z_mm):
