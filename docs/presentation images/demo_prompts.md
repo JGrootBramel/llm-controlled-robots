@@ -1,0 +1,1 @@
+please do a healthcheck if everything is okay explore your surroundings and pick a red cube

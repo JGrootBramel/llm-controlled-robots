@@ -29,6 +29,9 @@ _KEY_SERVICES = [
     "/arm_control/place",
     "/arm_control/go_home",
 ]
+_HEALTHCHECK_SERVICE_EXCLUSIONS = {
+    "/map_update_manager/save_map",
+}
 
 _KEY_TOPICS = [
     "/red_cubes/latest_pose",
@@ -85,9 +88,12 @@ def get_autonomy_status() -> str:
     except Exception:
         advertised = set()
 
+    required_services = [
+        s for s in _KEY_SERVICES if s not in _HEALTHCHECK_SERVICE_EXCLUSIONS
+    ]
     status = {
         "topics": {t: (t in published) for t in _KEY_TOPICS},
-        "services": {s: (s in advertised) for s in _KEY_SERVICES},
+        "services": {s: (s in advertised) for s in required_services},
     }
     if published_err:
         status["warnings"] = [published_err]
