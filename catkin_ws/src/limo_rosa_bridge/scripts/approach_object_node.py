@@ -131,11 +131,22 @@ class ApproachObject:
                 success=False, message="Failed to transform target into map frame."
             )
 
-        ok, standoff_pose = self._send_standoff(target_map)
-        if not ok:
-            return TriggerResponse(
-                success=False, message="No reachable standoff goal found."
+        current_d = self._planar_distance_to(target_map)
+        standoff_pose = None
+        if current_d is not None and current_d <= self.min_standoff:
+            rospy.loginfo(
+                "[approach_object] already within min_standoff (d=%.2f <= %.2f), "
+                "skipping move_base standoff.",
+                current_d,
+                self.min_standoff,
             )
+        else:
+            ok, standoff_pose = self._send_standoff(target_map)
+            if not ok:
+                return TriggerResponse(
+                    success=False,
+                    message="No reachable standoff goal found; move_base could not plan.",
+                )
 
         if self.close_in_enabled:
             close_ok = self._close_in_if_needed(target_map)
@@ -159,6 +170,11 @@ class ApproachObject:
                 f"{target_map.pose.position.y:.2f}) from standoff "
                 f"({standoff_pose.pose.position.x:.2f}, "
                 f"{standoff_pose.pose.position.y:.2f})."
+                if standoff_pose is not None
+                else (
+                    f"Approached target at ({target_map.pose.position.x:.2f}, "
+                    f"{target_map.pose.position.y:.2f}) without a new standoff move."
+                )
             ),
         )
 
@@ -167,33 +183,59 @@ class ApproachObject:
         tx = target_map.pose.position.x
         ty = target_map.pose.position.y
         base_yaw = self._robot_yaw_towards(tx, ty)
-        cands = standoff_helpers.standoff_candidates(
-            tx, ty, base_yaw,
-            distance_m=self.standoff,
-            arc_deg=self.standoff_arc_deg,
-            max_arc_deg=self.standoff_max_deg,
-        )
-        for (gx, gy, yaw) in cands:
-            goal_pose = self._make_goal_pose(gx, gy, yaw)
-            goal = MoveBaseGoal()
-            goal.target_pose = goal_pose
-            rospy.loginfo(
-                "[approach_object] Sending standoff goal (%.2f, %.2f, yaw=%.2f)",
-                gx, gy, yaw,
+        for distance_m in self._standoff_distances():
+            cands = standoff_helpers.standoff_candidates(
+                tx,
+                ty,
+                base_yaw,
+                distance_m=distance_m,
+                arc_deg=self.standoff_arc_deg,
+                max_arc_deg=self.standoff_max_deg,
             )
-            self.mb.send_goal(goal)
-            finished = self.mb.wait_for_result(
-                rospy.Duration(self.move_base_timeout_s)
-            )
-            status = self.mb.get_state()
-            if finished and status == GoalStatus.SUCCEEDED:
-                return True, goal_pose
-            rospy.logwarn(
-                "[approach_object] standoff (%.2f, %.2f) not reached (status=%s), "
-                "trying next candidate.", gx, gy, status,
-            )
-            self.mb.cancel_all_goals()
+            for (gx, gy, yaw) in cands:
+                goal_pose = self._make_goal_pose(gx, gy, yaw)
+                goal = MoveBaseGoal()
+                goal.target_pose = goal_pose
+                rospy.loginfo(
+                    "[approach_object] Sending standoff goal (%.2f, %.2f, yaw=%.2f, d=%.2f)",
+                    gx,
+                    gy,
+                    yaw,
+                    distance_m,
+                )
+                self.mb.send_goal(goal)
+                finished = self.mb.wait_for_result(
+                    rospy.Duration(self.move_base_timeout_s)
+                )
+                status = self.mb.get_state()
+                if finished and status == GoalStatus.SUCCEEDED:
+                    return True, goal_pose
+                rospy.logwarn(
+                    "[approach_object] standoff (%.2f, %.2f, d=%.2f) not reached (status=%s), "
+                    "trying next candidate.",
+                    gx,
+                    gy,
+                    distance_m,
+                    status,
+                )
+                self.mb.cancel_all_goals()
         return False, None
+
+    def _standoff_distances(self):
+        """Try conservative standoff radii from farther to closer."""
+        values = [float(self.standoff)]
+        if self.min_standoff < self.standoff:
+            mid = (self.standoff + self.min_standoff) * 0.5
+            values.extend([mid, float(self.min_standoff)])
+        # Deduplicate while preserving order and keeping physically valid radii.
+        seen = set()
+        ordered = []
+        for v in values:
+            r = max(0.05, round(float(v), 3))
+            if r not in seen:
+                seen.add(r)
+                ordered.append(r)
+        return ordered
 
     # ------------------------------------------------- step 2: close-in drive
     def _close_in_if_needed(self, target_map):
