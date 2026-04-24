@@ -13,10 +13,12 @@ from ..ros_clients import ensure_rospy
 _PICK_SRV = "/arm_control/pick"
 _PICK_VENDOR_SYNC_SRV = "/arm_control/pick_vendor_sync"
 _PLACE_SRV = "/arm_control/place"
+_PLACE_AT_OVERRIDE_SRV = "/arm_control/place_at_override"
 _HOME_SRV = "/arm_control/go_home"
 _APPROACH_SRV = "/approach_object/approach"
 _CANCEL_APPROACH_SRV = "/approach_object/cancel"
 _TARGET_OVERRIDE_TOPIC = "/arm_control/target_pose_override"
+_PLACE_OVERRIDE_TOPIC = "/arm_control/place_pose_override"
 
 
 def _trigger(service_name: str) -> str:
@@ -133,6 +135,42 @@ def place_object() -> str:
     Calls ``/arm_control/place`` (``std_srvs/Trigger``).
     """
     return _trigger(_PLACE_SRV)
+
+
+@tool
+def drop_at_pose(
+    x_m: float,
+    y_m: float,
+    z_m: float,
+    frame_id: str = "map",
+) -> str:
+    """Drop whatever is held at an explicit 3D pose.
+
+    Publishes a one-shot pose to ``/arm_control/place_pose_override`` then
+    calls ``/arm_control/place_at_override``.
+    """
+    ensure_rospy()
+    frame_id = frame_id.strip() if frame_id else ""
+    if not frame_id:
+        return "Invalid frame_id: empty string is not allowed."
+
+    pub = rospy.Publisher(_PLACE_OVERRIDE_TOPIC, PoseStamped, queue_size=1, latch=True)
+    rospy.sleep(0.2)
+    pose = PoseStamped()
+    pose.header.stamp = rospy.Time.now()
+    pose.header.frame_id = frame_id
+    pose.pose.position.x = float(x_m)
+    pose.pose.position.y = float(y_m)
+    pose.pose.position.z = float(z_m)
+    pose.pose.orientation.w = 1.0
+    pub.publish(pose)
+    rospy.sleep(0.2)
+    place_result = _trigger(_PLACE_AT_OVERRIDE_SRV)
+    return (
+        f"Drop pose published to {_PLACE_OVERRIDE_TOPIC} in frame "
+        f"'{frame_id}' at (x={x_m:.3f}, y={y_m:.3f}, z={z_m:.3f}). "
+        f"Drop result: {place_result}"
+    )
 
 
 @tool

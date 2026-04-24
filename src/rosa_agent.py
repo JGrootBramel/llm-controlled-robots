@@ -56,6 +56,7 @@ _PICKUP_TOOL_NAMES = [
     "cancel_approach",
     "pick_object",
     "pick_at_pose",
+    "drop_at_pose",
     "arm_go_home",
     "place_object",
     "halt_robot",
@@ -190,7 +191,11 @@ def _deterministic_red_cube_flow(user_input: str):
         (("pick" in txt) or ("grab" in txt))
         and "red cube" in txt
     )
-    if not (is_scan or is_approach or is_pick):
+    is_drop = (
+        ("drop" in txt or "place" in txt)
+        and ("x=" in txt and "y=" in txt and "z=" in txt)
+    )
+    if not (is_scan or is_approach or is_pick or is_drop):
         return None
 
     steps = []
@@ -217,6 +222,16 @@ def _deterministic_red_cube_flow(user_input: str):
                 steps.append(
                     f"pick_vendor_sync: {_call_tool('pick_object_vendor_sync')}"
                 )
+    if is_drop:
+        xyz = _extract_xyz(user_input)
+        if xyz is None:
+            steps.append("drop_at_pose: FAIL: missing x/y/z coordinates")
+        else:
+            x_m, y_m, z_m = xyz
+            steps.append(
+                "drop_at_pose: "
+                + _call_tool("drop_at_pose", x_m=x_m, y_m=y_m, z_m=z_m, frame_id="map")
+            )
     return "\n".join(steps)
 
 # --- MAIN LOOP ---

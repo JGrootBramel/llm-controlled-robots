@@ -54,6 +54,7 @@ class ArmControl:
         self._lock = Lock()
         self._latest_target = None
         self._override_target = None
+        self._override_place_target = None
 
         self.tfbuf = tf2_ros.Buffer(rospy.Duration(10.0))
         self.tfl = tf2_ros.TransformListener(self.tfbuf)
@@ -67,6 +68,12 @@ class ArmControl:
             self._on_target_override,
             queue_size=1,
         )
+        rospy.Subscriber(
+            "~place_pose_override",
+            PoseStamped,
+            self._on_place_override,
+            queue_size=1,
+        )
 
         self._mc = self._connect_arm()
         self.ready_angles = self._compute_ready_angles()
@@ -76,6 +83,7 @@ class ArmControl:
             "~pick_vendor_sync", Trigger, self._handle_pick_vendor_sync
         )
         rospy.Service("~place", Trigger, self._handle_place)
+        rospy.Service("~place_at_override", Trigger, self._handle_place_at_override)
         rospy.Service("~go_home", Trigger, self._handle_home)
 
     # ------------------------------------------------------------ params
@@ -104,6 +112,12 @@ class ArmControl:
         self.pre_dz_mm = float(rospy.get_param("~pre_grasp_delta_z_mm", 5.0))
         self.grasp_z_adjust_mm = float(
             rospy.get_param("~grasp_z_adjust_mm", 140.0)
+        )
+        self.grasp_z_adjust_only_below_m = float(
+            rospy.get_param("~grasp_z_adjust_only_below_m", 0.08)
+        )
+        self.apply_z_adjust_to_override = bool(
+            rospy.get_param("~apply_z_adjust_to_override", False)
         )
         self.ik_verify_tol_mm = float(
             rospy.get_param("~ik_verify_tol_mm", 15.0)
@@ -225,6 +239,17 @@ class ArmControl:
             msg.pose.position.z,
         )
 
+    def _on_place_override(self, msg):
+        with self._lock:
+            self._override_place_target = msg
+        rospy.loginfo(
+            "[arm_control] override place target latched: frame=%s xyz=(%.3f, %.3f, %.3f)",
+            msg.header.frame_id,
+            msg.pose.position.x,
+            msg.pose.position.y,
+            msg.pose.position.z,
+        )
+
     def _resolve_pick_arm_mm(self):
         """Return ``(cx, cy, cz, source)`` in arm millimetres or ``None`` if no target."""
         target, source = self._select_target_in_base()
@@ -243,7 +268,13 @@ class ArmControl:
         X_arm, Y_arm, Z_arm = mch.base_to_arm_mm(
             x_m, y_m, z_m, mount_yaw_deg=self.mount_yaw_deg
         )
-        Z_arm = Z_arm + float(self.grasp_z_adjust_mm)
+        # Use measured z when available. Apply old fixed z offset only when
+        # detector z is clearly unreliable (near floor) or if explicitly requested.
+        apply_adjust = (source != "override" and z_m < self.grasp_z_adjust_only_below_m) or (
+            source == "override" and self.apply_z_adjust_to_override
+        )
+        if apply_adjust:
+            Z_arm = Z_arm + float(self.grasp_z_adjust_mm)
         limits = mch.GraspLimits(
             coord_lim_mm=self.coord_lim_mm,
             pre_dy_mm=self.pre_dy_mm,
@@ -327,6 +358,43 @@ class ArmControl:
             return TriggerResponse(success=True, message="placed and returned home")
         except Exception as e:
             return TriggerResponse(success=False, message=f"place failed: {e}")
+
+    def _handle_place_at_override(self, _req):
+        if self._mc is None:
+            return TriggerResponse(success=False, message="arm not connected")
+        with self._lock:
+            pose = self._override_place_target
+            self._override_place_target = None
+        if pose is None:
+            return TriggerResponse(
+                success=False,
+                message="No place override target available; publish ~place_pose_override first.",
+            )
+        xyz = self._pose_in_base(pose)
+        if xyz is None:
+            return TriggerResponse(
+                success=False,
+                message=f"Could not transform place override into {self.base_frame}.",
+            )
+        x_m, y_m, z_m = xyz
+        X_arm, Y_arm, Z_arm = mch.base_to_arm_mm(
+            x_m, y_m, z_m, mount_yaw_deg=self.mount_yaw_deg
+        )
+        limits = mch.GraspLimits(
+            coord_lim_mm=self.coord_lim_mm,
+            pre_dy_mm=self.pre_dy_mm,
+            pre_dz_mm=self.pre_dz_mm,
+        )
+        px, py, pz, _ = mch.clamp_grasp_coords_mm(X_arm, Y_arm, Z_arm, limits)
+        ok = self._execute_place_at(px, py, pz)
+        return TriggerResponse(
+            success=bool(ok),
+            message=(
+                f"place_at_override ok at arm_mm=({px:.0f},{py:.0f},{pz:.0f})"
+                if ok
+                else "place_at_override failed; see node logs"
+            ),
+        )
 
     def _handle_home(self, _req):
         if self._mc is None:
@@ -472,8 +540,13 @@ class ArmControl:
                 time.sleep(1.5)
                 return False
 
-            self._mc.set_gripper_state(1, 80)
-            time.sleep(1.5)
+            if not self._close_gripper_strong():
+                rospy.logerr("[arm_control] gripper failed to close at grasp pose")
+                self._mc.send_angles(list(self.ready_angles), 50)
+                time.sleep(1.5)
+                self._mc.send_angles(list(self.home_angles), 50)
+                time.sleep(1.5)
+                return False
             # Lift via the ready pose first so the cube clears the work area
             # before J1 swings the arm back to home.
             self._mc.send_angles(list(self.ready_angles), 50)
@@ -483,6 +556,45 @@ class ArmControl:
             return True
         except Exception as e:
             rospy.logerr("[arm_control] pick error: %s", e)
+            return False
+
+    def _execute_place_at(self, x_mm, y_mm, z_mm):
+        rx, ry, rz = self.grasp_rxryrz
+        speed = self.speed
+        try:
+            self._mc.send_angles(list(self.ready_angles), max(20, speed // 2))
+            time.sleep(2.0)
+            pre = [x_mm, y_mm + self.pre_dy_mm, z_mm + self.pre_dz_mm, rx, ry, rz]
+            self._mc.send_coords(pre, speed, int(self.approach_mode))
+            time.sleep(2.0)
+            place = [x_mm, y_mm, z_mm, rx, ry, rz]
+            self._mc.send_coords(place, speed, 1)
+            time.sleep(2.0)
+            self._mc.set_gripper_state(0, self.place_gripper_open)
+            time.sleep(1.2)
+            self._mc.send_angles(list(self.ready_angles), 50)
+            time.sleep(1.5)
+            self._mc.send_angles(list(self.home_angles), 50)
+            time.sleep(1.5)
+            return True
+        except Exception as e:
+            rospy.logerr("[arm_control] place_at error: %s", e)
+            return False
+
+    def _close_gripper_strong(self):
+        """Best-effort close+verify to reliably hold cubes before retreat."""
+        try:
+            for _ in range(3):
+                self._mc.set_gripper_state(1, 100)
+                time.sleep(0.35)
+            get_val = getattr(self._mc, "get_gripper_value", None)
+            if callable(get_val):
+                v = get_val()
+                if isinstance(v, (int, float)) and v <= 5:
+                    return False
+            return True
+        except Exception as e:
+            rospy.logerr("[arm_control] gripper close error: %s", e)
             return False
 
     def _execute_pick_vendor_sync_impl(self, x_mm, y_mm, z_mm):
