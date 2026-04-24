@@ -55,6 +55,7 @@ class ArmControl:
         self._latest_target = None
         self._override_target = None
         self._override_place_target = None
+        self._last_target_error = None
 
         self.tfbuf = tf2_ros.Buffer(rospy.Duration(10.0))
         self.tfl = tf2_ros.TransformListener(self.tfbuf)
@@ -261,8 +262,12 @@ class ArmControl:
 
     def _resolve_pick_arm_mm(self):
         """Return ``(cx, cy, cz, source)`` in arm millimetres or ``None`` if no target."""
+        self._last_target_error = None
         target, source = self._select_target_in_base()
         if target is None:
+            self._last_target_error = (
+                source if isinstance(source, str) and source else "no_target"
+            )
             return None
         x_m, y_m, z_m = target
         if z_m < 0.05:
@@ -297,6 +302,11 @@ class ArmControl:
                 or abs(Y_arm) > self.coord_lim_mm
                 or abs(Z_arm) > self.coord_lim_mm
             ):
+                self._last_target_error = (
+                    "override target out of arm reach: "
+                    f"arm_mm=({X_arm:.1f}, {Y_arm:.1f}, {Z_arm:.1f}) "
+                    f"limit=+/-{self.coord_lim_mm:.1f}"
+                )
                 rospy.logerr(
                     "[arm_control] override target out of arm cube: "
                     "(%.1f, %.1f, %.1f) mm",
@@ -338,11 +348,12 @@ class ArmControl:
             except Exception:
                 resolved = None
         if resolved is None:
+            reason = self._last_target_error or "override_required"
             return TriggerResponse(
                 success=False,
                 message=(
-                    "No explicit target pose available; publish "
-                    "~target_pose_override first."
+                    "Pick target unavailable: "
+                    f"{reason}. Publish ~target_pose_override with a reachable pose."
                 ),
             )
         cx, cy, cz, source = resolved
@@ -382,11 +393,12 @@ class ArmControl:
             except Exception:
                 resolved = None
         if resolved is None:
+            reason = self._last_target_error or "override_required"
             return TriggerResponse(
                 success=False,
                 message=(
-                    "No explicit target pose available; publish "
-                    "~target_pose_override first."
+                    "Pick target unavailable: "
+                    f"{reason}. Publish ~target_pose_override with a reachable pose."
                 ),
             )
         cx, cy, cz, source = resolved

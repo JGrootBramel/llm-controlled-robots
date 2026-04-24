@@ -150,11 +150,11 @@ class ApproachObject:
                 success=False, message="Failed to transform target into map frame."
             )
 
-        close_ok, end_target = self._simple_approach_to_target(target_map)
+        close_ok, end_target, fail_reason = self._simple_approach_to_target(target_map)
         if not close_ok:
             return TriggerResponse(
                 success=False,
-                message="Simple close-in failed or timed out.",
+                message=f"Simple close-in failed: {fail_reason}",
             )
 
         aligned = self._yaw_align(end_target)
@@ -183,11 +183,19 @@ class ApproachObject:
         deadline = rospy.Time.now() + rospy.Duration(self.close_in_timeout_s)
         rate = rospy.Rate(10.0)
         last_target = target_map
+        last_distance = None
 
         while not rospy.is_shutdown():
             if rospy.Time.now() > deadline:
                 self.pub_cmd.publish(Twist())
-                return False, last_target
+                if last_distance is None:
+                    return False, last_target, "timed out before TF distance became available"
+                return (
+                    False,
+                    last_target,
+                    f"timed out at remaining distance {last_distance:.2f} m "
+                    f"(timeout={self.close_in_timeout_s:.1f}s)",
+                )
 
             live_target = self._latest_target_in_map() or target_map
             last_target = live_target
@@ -195,6 +203,7 @@ class ApproachObject:
             if d is None:
                 rate.sleep()
                 continue
+            last_distance = float(d)
             if d <= self.min_standoff:
                 break
 
@@ -203,7 +212,13 @@ class ApproachObject:
                 if not guard_ok:
                     rospy.logwarn("[approach_object] blocked while approaching: %s", why)
                     self.pub_cmd.publish(Twist())
-                    return False, last_target
+                    if last_distance is None:
+                        return False, last_target, f"blocked by guard: {why}"
+                    return (
+                        False,
+                        last_target,
+                        f"blocked by guard at {last_distance:.2f} m: {why}",
+                    )
 
             err = self._bearing_error_to_target(live_target)
             if err is None:
@@ -223,9 +238,9 @@ class ApproachObject:
         self.pub_cmd.publish(Twist())
         if self.final_extra_forward_m > 0.0:
             if not self._drive_forward_extra(self.final_extra_forward_m):
-                return False, last_target
+                return False, last_target, "extra forward segment blocked by guard"
         self.pub_cmd.publish(Twist())
-        return True, last_target
+        return True, last_target, ""
 
     def _drive_forward_extra(self, distance_m):
         speed = max(0.03, min(abs(self.close_in_speed), 0.10))
