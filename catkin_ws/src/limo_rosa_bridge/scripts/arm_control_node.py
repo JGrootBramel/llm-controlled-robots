@@ -351,6 +351,7 @@ class ArmControl:
             except Exception:
                 resolved = None
         if resolved is None:
+            self._close_gripper_demo()
             reason = self._last_target_error or "override_required"
             return TriggerResponse(
                 success=False,
@@ -361,6 +362,8 @@ class ArmControl:
             )
         cx, cy, cz, source = resolved
         ok = self._execute_pick(cx, cy, cz, use_vendor_sync=False)
+        if not ok:
+            self._close_gripper_demo()
         return TriggerResponse(
             success=bool(ok),
             message=(
@@ -396,6 +399,7 @@ class ArmControl:
             except Exception:
                 resolved = None
         if resolved is None:
+            self._close_gripper_demo()
             reason = self._last_target_error or "override_required"
             return TriggerResponse(
                 success=False,
@@ -406,6 +410,8 @@ class ArmControl:
             )
         cx, cy, cz, source = resolved
         ok = self._execute_pick(cx, cy, cz, use_vendor_sync=True)
+        if not ok:
+            self._close_gripper_demo()
         return TriggerResponse(
             success=bool(ok),
             message=(
@@ -706,6 +712,14 @@ class ArmControl:
         except Exception as e:
             rospy.logerr("[arm_control] gripper close error: %s", e)
             return False
+
+    def _close_gripper_demo(self):
+        """Best-effort close command for demo flow even after failed picks."""
+        try:
+            self._mc.set_gripper_state(1, 100)
+            time.sleep(0.4)
+        except Exception as e:
+            rospy.logwarn("[arm_control] demo gripper close failed: %s", e)
 
     def _execute_pick_vendor_sync_impl(self, x_mm, y_mm, z_mm):
         """Pick using Elephant ``sync_send_*`` APIs; requires ``sync_send_coords``."""
