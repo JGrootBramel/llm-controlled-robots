@@ -115,6 +115,10 @@ def pick_at_pose(
     pub.publish(pose)
     rospy.sleep(0.2)
     pick_result = _trigger(_PICK_SRV)
+    # Fallback: vendor sync often succeeds when async send_coords timing is flaky.
+    if not pick_result.startswith("OK"):
+        vendor_result = _trigger(_PICK_VENDOR_SYNC_SRV)
+        pick_result = f"{pick_result} | vendor_sync_retry: {vendor_result}"
     return (
         f"Override pose published to {_TARGET_OVERRIDE_TOPIC} in frame "
         f"'{frame_id}' at (x={x_m:.3f}, y={y_m:.3f}, z={z_m:.3f}). "

@@ -575,9 +575,10 @@ class ArmControl:
                 return xyz, "override"
             rospy.logwarn(
                 "[arm_control] override pose could not be transformed to %s; "
-                "falling back to stream",
+                "NOT falling back to stream for this pick.",
                 self.base_frame,
             )
+            return None, "override_tf_failed"
 
         if stream is None:
             return None, "none"

@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from rosa import ROSA
@@ -45,6 +46,9 @@ _sanitize_ros_environment()
 import limo_llm_control.tools as robot_tools
 
 _PICKUP_TOOL_NAMES = [
+    # base motion (needed to reposition before/after pickup)
+    "turn_in_place",
+    "drive_distance",
     "is_red_cube_found",
     "snapshot_red_cube",
     "get_latest_red_cube",
@@ -54,6 +58,7 @@ _PICKUP_TOOL_NAMES = [
     "pick_at_pose",
     "arm_go_home",
     "place_object",
+    "halt_robot",
 ]
 
 
@@ -155,6 +160,65 @@ def _run_startup_healthcheck() -> None:
     )
     print(json.dumps(report, indent=2, sort_keys=True), flush=True)
 
+
+def _call_tool(tool_name: str, **kwargs) -> str:
+    tool = getattr(robot_tools, tool_name, None)
+    if tool is None:
+        return f"FAIL: tool '{tool_name}' not available"
+    try:
+        if hasattr(tool, "invoke"):
+            return str(tool.invoke(kwargs or {}))
+        return str(tool(**kwargs))
+    except Exception as exc:
+        return f"FAIL: {tool_name} raised: {exc}"
+
+
+def _extract_xyz(text: str):
+    x = re.search(r"x\s*=\s*(-?\d+(?:\.\d+)?)", text, re.IGNORECASE)
+    y = re.search(r"y\s*=\s*(-?\d+(?:\.\d+)?)", text, re.IGNORECASE)
+    z = re.search(r"z\s*=\s*(-?\d+(?:\.\d+)?)", text, re.IGNORECASE)
+    if not (x and y and z):
+        return None
+    return float(x.group(1)), float(y.group(1)), float(z.group(1))
+
+
+def _deterministic_red_cube_flow(user_input: str):
+    txt = user_input.lower()
+    is_scan = "scan" in txt and "red cube" in txt
+    is_approach = "approach" in txt and "red cube" in txt
+    is_pick = (
+        (("pick" in txt) or ("grab" in txt))
+        and "red cube" in txt
+    )
+    if not (is_scan or is_approach or is_pick):
+        return None
+
+    steps = []
+    steps.append(f"snapshot: {_call_tool('snapshot_red_cube')}")
+
+    if is_scan and not (is_approach or is_pick):
+        return "\n".join(steps)
+
+    if is_approach or is_pick:
+        steps.append(f"approach: {_call_tool('approach_object')}")
+
+    if is_pick:
+        xyz = _extract_xyz(user_input)
+        if xyz is not None:
+            x_m, y_m, z_m = xyz
+            steps.append(
+                "pick_at_pose: "
+                + _call_tool("pick_at_pose", x_m=x_m, y_m=y_m, z_m=z_m, frame_id="map")
+            )
+        else:
+            pick_res = _call_tool("pick_object")
+            steps.append(f"pick: {pick_res}")
+            if not pick_res.startswith("OK"):
+                steps.append(
+                    f"pick_vendor_sync: {_call_tool('pick_object_vendor_sync')}"
+                )
+    return "\n".join(steps)
+
 # --- MAIN LOOP ---
 if __name__ == "__main__":
     print("\n✅ ROSA Limo Agent Ready! Type 'exit' to quit.")
@@ -166,7 +230,11 @@ if __name__ == "__main__":
             break
             
         try:
-            response = agent.invoke(user_input)
+            forced = _deterministic_red_cube_flow(user_input)
+            if forced is not None:
+                response = forced
+            else:
+                response = agent.invoke(user_input)
             print(f"ROSA: {response}")
             
         except Exception as e:
