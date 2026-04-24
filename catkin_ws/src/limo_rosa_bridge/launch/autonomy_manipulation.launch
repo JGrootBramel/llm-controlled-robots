@@ -20,6 +20,13 @@
   <arg name="close_in_guard_half_angle_deg" default="18.0" />
   <arg name="close_in_guard_min_valid_beams" default="3" />
   <arg name="close_in_guard_scan_stale_s" default="0.5" />
+  <!-- If true, check /move_base/make_plan before sending goal.
+       This avoids long recovery-spin loops for clearly unreachable goals. -->
+  <arg name="precheck_plan_service" default="true" />
+  <!-- Keep move_base wait short because we want immediate fallback behavior. -->
+  <arg name="move_base_timeout_s" default="8.0" />
+  <arg name="close_in_without_standoff_enabled" default="true" />
+  <arg name="close_in_without_standoff_max_dist_m" default="1.2" />
   <!-- Half-side of the arm's safe Cartesian cube (mm). MyCobot 280 has a
        nominal reach of ~280 mm and a usable max closer to 320 mm, so 300
        is a reasonable headroom bump to pair with the larger standoff. -->
@@ -72,6 +79,10 @@
     <param name="close_in_guard_half_angle_deg" value="$(arg close_in_guard_half_angle_deg)" />
     <param name="close_in_guard_min_valid_beams" value="$(arg close_in_guard_min_valid_beams)" />
     <param name="close_in_guard_scan_stale_s" value="$(arg close_in_guard_scan_stale_s)" />
+    <param name="precheck_plan_service" value="$(arg precheck_plan_service)" />
+    <param name="move_base_timeout_s" value="$(arg move_base_timeout_s)" />
+    <param name="close_in_without_standoff_enabled" value="$(arg close_in_without_standoff_enabled)" />
+    <param name="close_in_without_standoff_max_dist_m" value="$(arg close_in_without_standoff_max_dist_m)" />
   </node>
 
   <node pkg="limo_rosa_bridge" type="arm_control_node.py" name="arm_control" output="screen">

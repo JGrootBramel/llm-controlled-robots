@@ -44,6 +44,18 @@ _sanitize_ros_environment()
 # (Passe den Importpfad an, falls deine __init__.py woanders liegt)
 import limo_llm_control.tools as robot_tools
 
+_PICKUP_TOOL_NAMES = [
+    "is_red_cube_found",
+    "snapshot_red_cube",
+    "get_latest_red_cube",
+    "approach_object",
+    "cancel_approach",
+    "pick_object",
+    "pick_at_pose",
+    "arm_go_home",
+    "place_object",
+]
+
 
 # --- TOOLS DYNAMISCH LADEN + LOGGING FÜR JEDEN AUFRUF ---
 def _wrap_with_tool_logging(tool, name):
@@ -81,11 +93,20 @@ def _wrap_with_tool_logging(tool, name):
 
     return tool
 
+tool_profile = os.getenv("ROSA_TOOL_PROFILE", "pickup").strip().lower()
+if tool_profile == "all":
+    selected_tool_names = list(robot_tools.__all__)
+else:
+    # Default to minimal pickup flow to avoid unrelated tool interference.
+    selected_tool_names = [
+        name for name in _PICKUP_TOOL_NAMES if name in set(robot_tools.__all__)
+    ]
+
 all_my_tools = []
-for tool_name in robot_tools.__all__:
+for tool_name in selected_tool_names:
     t = getattr(robot_tools, tool_name)
     all_my_tools.append(_wrap_with_tool_logging(t, tool_name))
-print(f"Lade {len(all_my_tools)} Tools: {robot_tools.__all__}")
+print(f"Lade {len(all_my_tools)} Tools (profile={tool_profile}): {selected_tool_names}")
 
 
 # --- INITIALIZE LLM & PROMPT ---
