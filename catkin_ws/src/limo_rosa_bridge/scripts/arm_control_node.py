@@ -297,11 +297,20 @@ class ArmControl:
             pre_dz_mm=self.pre_dz_mm,
         )
         cx, cy, cz, clipped = mch.clamp_grasp_coords_mm(X_arm, Y_arm, Z_arm, limits)
+        clamp_delta = math.sqrt((cx - X_arm) ** 2 + (cy - Y_arm) ** 2 + (cz - Z_arm) ** 2)
         if clipped:
             rospy.logwarn(
                 "[arm_control] grasp coords clamped: (%.1f,%.1f,%.1f) -> (%.1f,%.1f,%.1f)",
                 X_arm, Y_arm, Z_arm, cx, cy, cz,
             )
+        # Reject picks that require major clamping: they are outside reachable workspace
+        # and tend to push/sweep cubes instead of grasping.
+        if clamp_delta > 80.0:
+            rospy.logerr(
+                "[arm_control] target out of reach (clamp_delta=%.1f mm); aborting pick.",
+                clamp_delta,
+            )
+            return None
         return (cx, cy, cz, source)
 
     def _handle_pick(self, _req):

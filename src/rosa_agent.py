@@ -205,7 +205,8 @@ def _deterministic_red_cube_flow(user_input: str):
         return "\n".join(steps)
 
     if is_approach or is_pick:
-        steps.append(f"approach: {_call_tool('approach_object')}")
+        approach_res = _call_tool("approach_object")
+        steps.append(f"approach: {approach_res}")
 
     if is_pick:
         xyz = _extract_xyz(user_input)
@@ -216,6 +217,9 @@ def _deterministic_red_cube_flow(user_input: str):
                 + _call_tool("pick_at_pose", x_m=x_m, y_m=y_m, z_m=z_m, frame_id="map")
             )
         else:
+            if "approach_res" in locals() and not str(approach_res).startswith("OK"):
+                steps.append("pick: SKIPPED because approach failed (out of arm reach).")
+                return "\n".join(steps)
             pick_res = _call_tool("pick_object")
             steps.append(f"pick: {pick_res}")
             if not pick_res.startswith("OK"):

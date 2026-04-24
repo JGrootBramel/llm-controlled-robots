@@ -27,6 +27,8 @@
   <arg name="move_base_timeout_s" default="8.0" />
   <arg name="close_in_without_standoff_enabled" default="true" />
   <arg name="close_in_without_standoff_max_dist_m" default="3.0" />
+  <arg name="fallback_force_closein_near_target_m" default="0.30" />
+  <arg name="fallback_force_closein_speed" default="0.04" />
   <!-- Half-side of the arm's safe Cartesian cube (mm). MyCobot 280 has a
        nominal reach of ~280 mm and a usable max closer to 320 mm, so 300
        is a reasonable headroom bump to pair with the larger standoff. -->
@@ -87,6 +89,8 @@
     <param name="move_base_timeout_s" value="$(arg move_base_timeout_s)" />
     <param name="close_in_without_standoff_enabled" value="$(arg close_in_without_standoff_enabled)" />
     <param name="close_in_without_standoff_max_dist_m" value="$(arg close_in_without_standoff_max_dist_m)" />
+    <param name="fallback_force_closein_near_target_m" value="$(arg fallback_force_closein_near_target_m)" />
+    <param name="fallback_force_closein_speed" value="$(arg fallback_force_closein_speed)" />
   </node>
 
   <node pkg="limo_rosa_bridge" type="arm_control_node.py" name="arm_control" output="screen">
