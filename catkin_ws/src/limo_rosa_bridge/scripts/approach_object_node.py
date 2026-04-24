@@ -102,6 +102,12 @@ class ApproachObject:
             rospy.get_param("~move_base_timeout_s", 60.0)
         )
         self.close_in_timeout_s = float(rospy.get_param("~close_in_timeout_s", 15.0))
+        self.close_in_without_standoff_enabled = bool(
+            rospy.get_param("~close_in_without_standoff_enabled", True)
+        )
+        self.close_in_without_standoff_max_dist_m = float(
+            rospy.get_param("~close_in_without_standoff_max_dist_m", 1.2)
+        )
 
     # ---------------------------------------------------------- callbacks
     def _on_target(self, msg):
@@ -143,10 +149,25 @@ class ApproachObject:
         else:
             ok, standoff_pose = self._send_standoff(target_map)
             if not ok:
-                return TriggerResponse(
-                    success=False,
-                    message="No reachable standoff goal found; move_base could not plan.",
-                )
+                if self.close_in_without_standoff_enabled:
+                    fallback_ok = self._close_in_without_standoff(target_map)
+                    if not fallback_ok:
+                        return TriggerResponse(
+                            success=False,
+                            message=(
+                                "No reachable standoff goal found; move_base could not plan "
+                                "and close-in fallback failed."
+                            ),
+                        )
+                    rospy.logwarn(
+                        "[approach_object] move_base standoff failed; recovered with "
+                        "close-in fallback."
+                    )
+                else:
+                    return TriggerResponse(
+                        success=False,
+                        message="No reachable standoff goal found; move_base could not plan.",
+                    )
 
         if self.close_in_enabled:
             close_ok = self._close_in_if_needed(target_map)
@@ -266,6 +287,63 @@ class ApproachObject:
         self.pub_cmd.publish(Twist())
         return False
 
+    def _close_in_without_standoff(self, target_map):
+        d0 = self._planar_distance_to(target_map)
+        if d0 is None:
+            rospy.logwarn("[approach_object] close-in fallback: no TF distance to target.")
+            return False
+        if d0 > self.close_in_without_standoff_max_dist_m:
+            rospy.logwarn(
+                "[approach_object] close-in fallback disabled at long range "
+                "(d=%.2f > %.2f).",
+                d0,
+                self.close_in_without_standoff_max_dist_m,
+            )
+            return False
+
+        deadline = rospy.Time.now() + rospy.Duration(self.close_in_timeout_s)
+        rate = rospy.Rate(10.0)
+        while not rospy.is_shutdown():
+            if rospy.Time.now() > deadline:
+                self.pub_cmd.publish(Twist())
+                rospy.logwarn("[approach_object] close-in fallback timed out.")
+                return False
+
+            d = self._planar_distance_to(target_map)
+            if d is None:
+                rate.sleep()
+                continue
+            if d <= self.min_standoff:
+                self.pub_cmd.publish(Twist())
+                return True
+
+            if self.close_in_guard_enabled:
+                guard_ok, why = self._front_clearance_ok()
+                if not guard_ok:
+                    self.pub_cmd.publish(Twist())
+                    rospy.logwarn(
+                        "[approach_object] close-in fallback blocked by guard: %s", why
+                    )
+                    return False
+
+            err = self._bearing_error_to_target(target_map)
+            if err is None:
+                rate.sleep()
+                continue
+
+            tw = Twist()
+            if abs(err) > self.align_tol_rad:
+                tw.angular.z = float(
+                    self.align_angular_speed if err > 0 else -self.align_angular_speed
+                )
+            else:
+                tw.linear.x = float(self.close_in_speed)
+            self.pub_cmd.publish(tw)
+            rate.sleep()
+
+        self.pub_cmd.publish(Twist())
+        return False
+
     # ---------------------------------------------------- step 3: yaw align
     def _yaw_align(self, target_map):
         rate = rospy.Rate(20.0)
@@ -337,6 +415,21 @@ class ApproachObject:
                               tx - T.transform.translation.x)
         except Exception:
             return 0.0
+
+    def _bearing_error_to_target(self, target_map):
+        try:
+            T = self.tfbuf.lookup_transform(
+                self.map_frame, self.base_frame, rospy.Time(0), rospy.Duration(0.2)
+            )
+        except Exception:
+            return None
+        rx = T.transform.translation.x
+        ry = T.transform.translation.y
+        tx = target_map.pose.position.x
+        ty = target_map.pose.position.y
+        desired = math.atan2(ty - ry, tx - rx)
+        current = _yaw_from_quat(T.transform.rotation)
+        return _angle_diff(desired, current)
 
     def _make_goal_pose(self, gx, gy, yaw):
         ps = PoseStamped()
