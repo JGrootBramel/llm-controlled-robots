@@ -255,10 +255,26 @@ def _deterministic_red_cube_flow(user_input: str):
                 + _call_tool("pick_at_pose", x_m=x_m, y_m=y_m, z_m=z_m, frame_id="map")
             )
         else:
-            steps.append(
-                "pick_at_pose: FAIL: explicit coordinates required "
-                "(use x=..., y=..., z=...)."
-            )
+            # Auto-use latest detector pose when user requests generic red-cube pickup.
+            latest = _call_tool("get_latest_red_cube", timeout_s=1.0)
+            steps.append(f"pose: {latest}")
+            detected = _extract_detected_xyz(latest)
+            if detected is None:
+                steps.append(
+                    "pick_at_pose: FAIL: no valid detected x/y/z available yet."
+                )
+            else:
+                x_m, y_m, z_m = detected
+                steps.append(
+                    "pick_at_pose: "
+                    + _call_tool(
+                        "pick_at_pose",
+                        x_m=x_m,
+                        y_m=y_m,
+                        z_m=z_m,
+                        frame_id="map",
+                    )
+                )
     if is_drop:
         xyz = _extract_xyz(user_input)
         if xyz is None:

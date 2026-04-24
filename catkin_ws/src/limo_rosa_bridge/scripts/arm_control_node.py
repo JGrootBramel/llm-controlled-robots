@@ -325,6 +325,16 @@ class ArmControl:
             return TriggerResponse(success=False, message="arm not connected")
         resolved = self._resolve_pick_arm_mm()
         if resolved is None:
+            # Coordinate-driven flow can race: the override publisher may fire
+            # just before this service runs. Wait briefly for one override pose.
+            try:
+                msg = rospy.wait_for_message("~target_pose_override", PoseStamped, timeout=0.7)
+                with self._lock:
+                    self._override_target = msg
+                resolved = self._resolve_pick_arm_mm()
+            except Exception:
+                resolved = None
+        if resolved is None:
             return TriggerResponse(
                 success=False,
                 message=(
@@ -357,6 +367,14 @@ class ArmControl:
                 ),
             )
         resolved = self._resolve_pick_arm_mm()
+        if resolved is None:
+            try:
+                msg = rospy.wait_for_message("~target_pose_override", PoseStamped, timeout=0.7)
+                with self._lock:
+                    self._override_target = msg
+                resolved = self._resolve_pick_arm_mm()
+            except Exception:
+                resolved = None
         if resolved is None:
             return TriggerResponse(
                 success=False,
