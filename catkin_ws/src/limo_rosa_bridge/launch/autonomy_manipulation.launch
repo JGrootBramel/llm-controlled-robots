@@ -16,7 +16,7 @@
   <arg name="close_in_guard_enabled" default="true" />
   <!-- Lowered from 0.35 -> 0.30 so guarded close-in can finish the last ~5 cm
        when the support box is detected but still not in contact range. -->
-  <arg name="close_in_guard_distance_m" default="0.16" />
+  <arg name="close_in_guard_distance_m" default="0.13" />
   <arg name="close_in_guard_half_angle_deg" default="18.0" />
   <arg name="close_in_guard_min_valid_beams" default="3" />
   <arg name="close_in_guard_scan_stale_s" default="0.5" />
@@ -29,14 +29,14 @@
   <arg name="move_base_timeout_s" default="8.0" />
   <arg name="close_in_without_standoff_enabled" default="false" />
   <arg name="close_in_without_standoff_max_dist_m" default="3.0" />
-  <arg name="fallback_force_closein_near_target_m" default="0.28" />
+  <arg name="fallback_force_closein_near_target_m" default="0.40" />
   <arg name="fallback_force_closein_speed" default="0.04" />
   <!-- After reaching min_standoff, drive a final short nudge forward. -->
-  <arg name="final_extra_forward_m" default="0.02" />
+  <arg name="final_extra_forward_m" default="0.00" />
   <!-- Half-side of the arm's safe Cartesian cube (mm). MyCobot 280 has a
        nominal reach of ~280 mm and a usable max closer to 320 mm, so 300
        is a reasonable headroom bump to pair with the larger standoff. -->
-  <arg name="coord_limit_mm" default="300.0" />
+  <arg name="coord_limit_mm" default="380.0" />
   <!-- Base-frame point the IK-derived ready pose aims for. Move this
        forward in lock-step with ``standoff`` so the pre-grasp travel stays
        short once the wrist is pre-oriented. -->

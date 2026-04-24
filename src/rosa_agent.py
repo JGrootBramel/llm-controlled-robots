@@ -287,6 +287,9 @@ def _deterministic_red_cube_flow(user_input: str):
     if is_pick:
         approach_res = _call_tool("approach_object")
         steps.append(f"approach: {approach_res}")
+        if not approach_res.startswith("OK:"):
+            steps.append("pick_at_pose: SKIP: approach did not succeed; not attempting grasp.")
+            return "\n".join(steps)
         xyz = _extract_xyz(user_input)
         if xyz is not None:
             x_m, y_m, z_m = xyz
