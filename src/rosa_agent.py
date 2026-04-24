@@ -59,6 +59,7 @@ _PICKUP_TOOL_NAMES = [
     "drop_at_pose",
     "arm_go_home",
     "place_object",
+    "explore_and_fetch_all_cubes",
     "halt_robot",
 ]
 
@@ -194,6 +195,15 @@ def _extract_detected_xyz(text: str):
     return float(m.group(1)), float(m.group(2)), float(m.group(3))
 
 
+def _extract_home_pose(text: str):
+    x = re.search(r"x\s*=\s*(-?\d+(?:\.\d+)?)", text, re.IGNORECASE)
+    y = re.search(r"y\s*=\s*(-?\d+(?:\.\d+)?)", text, re.IGNORECASE)
+    yaw = re.search(r"yaw_deg\s*=\s*(-?\d+(?:\.\d+)?)", text, re.IGNORECASE)
+    if not (x and y and yaw):
+        return None
+    return float(x.group(1)), float(y.group(1)), float(yaw.group(1))
+
+
 def _deterministic_red_cube_flow(user_input: str):
     txt = user_input.lower()
     is_scan = "scan" in txt and "red cube" in txt
@@ -211,10 +221,38 @@ def _deterministic_red_cube_flow(user_input: str):
         ("drop" in txt or "place" in txt)
         and ("x=" in txt and "y=" in txt and "z=" in txt)
     )
-    if not (is_scan or is_approach or is_pick or is_drop):
+    is_scan_fetch_all = (
+        ("scan" in txt or "explore" in txt)
+        and ("all" in txt or "every" in txt)
+        and ("red cube" in txt or "red cubes" in txt)
+        and ("fetch" in txt or "collect" in txt or "pick" in txt or "grab" in txt)
+    )
+    if not (is_scan or is_approach or is_pick or is_drop or is_scan_fetch_all):
         return None
 
     steps = []
+    if is_scan_fetch_all:
+        home = _call_tool("get_current_map_pose")
+        steps.append(f"home_pose: {home}")
+        parsed = _extract_home_pose(home)
+        if parsed is None:
+            steps.append("scan_fetch_all: FAIL: could not parse current home pose.")
+            return "\n".join(steps)
+        hx, hy, hyaw = parsed
+        steps.append(
+            "scan_fetch_all: "
+            + _call_tool(
+                "explore_and_fetch_all_cubes",
+                home_x=hx,
+                home_y=hy,
+                home_yaw_deg=hyaw,
+                exploration_duration_s=45.0,
+                deduplication_radius_m=0.10,
+                max_cubes=20,
+            )
+        )
+        return "\n".join(steps)
+
     if is_continuous_scan_grab:
         steps.append(f"detector: {_call_tool('enable_red_cube_detector', enabled=True)}")
         max_attempts = 5

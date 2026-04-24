@@ -7,8 +7,8 @@
        Going much above 0.33 will clamp the grasp inside the safe cube and
        the gripper will stop short of the target. Raise ``coord_lim_mm``
        (default 300 mm below) alongside if you push this further. -->
-  <arg name="standoff" default="0.20" />
-  <arg name="min_standoff" default="0.15" />
+  <arg name="standoff" default="0.25" />
+  <arg name="min_standoff" default="0.25" />
   <!-- Smarter close-in: enabled by default, but guarded by front lidar so the
        base stops if something (e.g., the support box) is in front. -->
   <arg name="close_in_enabled" default="true" />
@@ -27,12 +27,12 @@
   <arg name="precheck_plan_service" default="true" />
   <!-- Keep move_base wait short because we want immediate fallback behavior. -->
   <arg name="move_base_timeout_s" default="8.0" />
-  <arg name="close_in_without_standoff_enabled" default="true" />
+  <arg name="close_in_without_standoff_enabled" default="false" />
   <arg name="close_in_without_standoff_max_dist_m" default="3.0" />
-  <arg name="fallback_force_closein_near_target_m" default="0.45" />
+  <arg name="fallback_force_closein_near_target_m" default="0.28" />
   <arg name="fallback_force_closein_speed" default="0.04" />
   <!-- After reaching min_standoff, drive a final short nudge forward. -->
-  <arg name="final_extra_forward_m" default="0.05" />
+  <arg name="final_extra_forward_m" default="0.02" />
   <!-- Half-side of the arm's safe Cartesian cube (mm). MyCobot 280 has a
        nominal reach of ~280 mm and a usable max closer to 320 mm, so 300
        is a reasonable headroom bump to pair with the larger standoff. -->

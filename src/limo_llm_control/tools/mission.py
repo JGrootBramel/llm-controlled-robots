@@ -481,6 +481,7 @@ def explore_and_fetch_all_cubes(
     home_yaw_deg: float,
     exploration_duration_s: float = 30.0,
     deduplication_radius_m: float = 0.05,
+    max_cubes: int = 20,
 ) -> str:
     """
     Explores for a fixed duration, finds all unique red cubes, then fetches them one by one.
@@ -502,7 +503,7 @@ def explore_and_fetch_all_cubes(
     """
     ensure_rospy()
     log = []
-    found_cubes_poses: list[Pose] = []
+    found_cubes_poses: list[PoseStamped] = []
 
     # --- 1. Exploration and Detection Phase ---
     log.append(f"--- Starting exploration for {exploration_duration_s}s ---")
@@ -511,15 +512,23 @@ def explore_and_fetch_all_cubes(
         # Check for duplicates
         for existing_pose in found_cubes_poses:
             dist = math.sqrt(
-                (msg.pose.position.x - existing_pose.position.x) ** 2
-                + (msg.pose.position.y - existing_pose.position.y) ** 2
+                (msg.pose.position.x - existing_pose.pose.position.x) ** 2
+                + (msg.pose.position.y - existing_pose.pose.position.y) ** 2
             )
             if dist < deduplication_radius_m:
                 return  # It's a duplicate, ignore it.
 
         # Not a duplicate, add it to the list
-        log.append(f"Found new unique cube at (x={msg.pose.position.x:.2f}, y={msg.pose.position.y:.2f})")
-        found_cubes_poses.append(msg.pose)
+        if len(found_cubes_poses) >= int(max_cubes):
+            return
+        log.append(
+            "Found new unique cube at "
+            f"(x={msg.pose.position.x:.2f}, y={msg.pose.position.y:.2f}, z={msg.pose.position.z:.2f})"
+        )
+        stored = PoseStamped()
+        stored.header = msg.header
+        stored.pose = msg.pose
+        found_cubes_poses.append(stored)
 
     sub = rospy.Subscriber("/red_cubes/latest_pose", PoseStamped, cube_callback)
     
@@ -539,15 +548,29 @@ def explore_and_fetch_all_cubes(
     if not found_cubes_poses:
         return "Exploration finished, but no cubes were found." + "\n" + "\n".join(log)
 
+    log.append("--- Stored cube coordinates (map xyz) ---")
+    for i, cube_pose in enumerate(found_cubes_poses, start=1):
+        log.append(
+            f"cube[{i}] = (x={cube_pose.pose.position.x:.3f}, "
+            f"y={cube_pose.pose.position.y:.3f}, z={cube_pose.pose.position.z:.3f})"
+        )
+
     # --- 2. Fetch and Deliver Phase ---
     delivered_count = 0
     for i, cube_pose in enumerate(found_cubes_poses):
-        log.append(f"--- Processing cube #{i+1}/{len(found_cubes_poses)} at (x={cube_pose.position.x:.2f}, y={cube_pose.position.y:.2f}) ---")
+        log.append(
+            f"--- Processing cube #{i+1}/{len(found_cubes_poses)} at "
+            f"(x={cube_pose.pose.position.x:.2f}, y={cube_pose.pose.position.y:.2f}, "
+            f"z={cube_pose.pose.position.z:.2f}) ---"
+        )
 
         # 1. Drive to a standoff pose near the cube
-        standoff_x = cube_pose.position.x - 0.25
-        standoff_y = cube_pose.position.y
-        yaw_rad = math.atan2(cube_pose.position.y - standoff_y, cube_pose.position.x - standoff_x)
+        standoff_x = cube_pose.pose.position.x - 0.30
+        standoff_y = cube_pose.pose.position.y
+        yaw_rad = math.atan2(
+            cube_pose.pose.position.y - standoff_y,
+            cube_pose.pose.position.x - standoff_x,
+        )
         yaw_deg = math.degrees(yaw_rad)
 
         nav_result = _go_to_map_pose(standoff_x, standoff_y, yaw_deg)
@@ -556,26 +579,37 @@ def explore_and_fetch_all_cubes(
             log.append("Skipping this cube due to navigation failure.")
             continue
 
-        # 2. Attempt to pick the object at its exact pose
+        # 2. Attempt to pick the object at its exact stored 3D pose.
         pub = rospy.Publisher("/arm_control/target_pose_override", PoseStamped, queue_size=1, latch=True)
-        rospy.sleep(0.2)
+        deadline = rospy.Time.now() + rospy.Duration(1.0)
+        while (
+            not rospy.is_shutdown()
+            and pub.get_num_connections() == 0
+            and rospy.Time.now() < deadline
+        ):
+            rospy.sleep(0.05)
         pose_msg = PoseStamped()
-        pose_msg.header.frame_id = "map" # The detector publishes in map frame
+        pose_msg.header.frame_id = cube_pose.header.frame_id or "map"
         pose_msg.header.stamp = rospy.Time.now()
-        pose_msg.pose = cube_pose
-        pub.publish(pose_msg)
-        rospy.sleep(0.2)
+        pose_msg.pose = cube_pose.pose
+        for _ in range(3):
+            pub.publish(pose_msg)
+            rospy.sleep(0.1)
         
         pick_result = _trigger("/arm_control/pick")
         log.append(f"Pick attempt: {pick_result}")
 
-        # 3. Drive to home location and 4. Place
+        # 3. Drive to home location and 4. Place.
+        # Continue to the next cube even when pick/place fails.
         nav_home_result = _go_to_map_pose(home_x, home_y, home_yaw_deg)
         log.append(f"Navigation to home: {nav_home_result}")
-        place_result = _trigger("/arm_control/place")
-        log.append(f"Place attempt: {place_result}")
-        if "OK" in place_result:
-            delivered_count += 1
+        if "OK" in pick_result:
+            place_result = _trigger("/arm_control/place")
+            log.append(f"Place attempt: {place_result}")
+            if "OK" in place_result:
+                delivered_count += 1
+        else:
+            log.append("Pick failed; continuing to next cube as requested.")
 
     header = f"Mission complete. Found {len(found_cubes_poses)} cubes. Successfully placed {delivered_count}."
     return header + "\n" + "\n".join(log)
